@@ -50,6 +50,8 @@ def plot_enthalpy(y3_true, y3_pred, dlev, figpath):
     plt.legend(loc="upper left")
     plt.show()
     fig.savefig(figpath + 'regress_enthalpy.png',bbox_inches='tight',dpi=450)
+    print('Max is %.4f, Min is %.4f, Mean is %.4f [K/s:' %(np.amax(k_dat_train), np.amin(k_dat_train), np.mean(k_dat_train)))
+
 
 
 # ----  PLOTTING SCRIPTS  ---- # 
