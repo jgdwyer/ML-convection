@@ -23,13 +23,13 @@ def build_nn(method,actv_fnc,hid_neur,batch_size,learning_rule,n_iter=None, n_st
         mlp = sknn.mlp.Regressor(layers,n_iter=n_iter,batch_size=batch_size,learning_rule=learning_rule,
                                  learning_rate=learning_rate,learning_momentum=learning_momentum,
                                  regularize = regularize, weight_decay = weight_decay, n_stable=n_stable,
-                                 callback={'on_epoch_finish': store_stats})
+                                 valid_size=valid_size, callback={'on_epoch_finish': store_stats})
     if method == 'classify':
         layers.append(sknn.mlp.Layer("Softmax"))
         mlp = sknn.mlp.Classifier(layers,n_iter=n_iter,batch_size=batch_size,learning_rule=learning_rule,
                                  learning_rate=learning_rate,learning_momentum=learning_momentum,
                                  regularize = regularize, weight_decay = weight_decay, n_stable=n_stable,
-                                 callback={'on_epoch_finish': store_stats})
+                                 valid_size=valid_size, callback={'on_epoch_finish': store_stats})
     #Write nn string
     layerstr='_'.join([str(h)+f[0] for h,f in zip(hid_neur,actv_fnc)])
     mlp_str = method[0] + "_" +  layerstr + "_" + learning_rule[0:3] + "{}".format(str(learning_momentum) if learning_rule=='momentum'
@@ -73,22 +73,36 @@ def train_nn(mlp,mlp_str,x1,cv1,x2,cv2,y2=None):
     end = time.time()
     print("Training Score: {:.4f}, Test Score: {:.4f} for Model {:s} ({:.1f} seconds)".format(
                                               train_score, test_score, mlp_str, end-start))
-    errors = np.asarray(error)
+    errors = np.asarray(error) # This is an N_iter x 4 array...see score_stats
     # Return the fitted models and the scores
     return mlp, errors
 
 
 # ---  EVALUATING NEURAL NETS  --- #
 
-def plot_model_error_over_time(errors, best_errors, mlp_str, fig_dir, txt):
+def plot_model_error_over_time(errors, mlp_str, fig_dir, txt):
     x = np.arange(errors.shape[0])
+    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
     # Plot error rate vs. iteration number
     fig=plt.figure()
-    plt.semilogy(x, errors, alpha=0.5)
-    plt.ylim((np.nanmin(errors), np.nanmax(errors)))
-    plt.semilogy(x, best_errors)
-    plt.ylim((np.nanmin(best_errors), np.nanmax(best_errors)))
+    # Plot training errors
+    ax1=plt.subplot(1, 2 ,1)
+    plt.semilogy(x, np.squeeze(errors[:,0,:]), alpha=0.5)
     plt.legend(mlp_str)
+    plt.gca().set_color_cycle(None) #reset color cycle
+    plt.semilogy(x, np.squeeze(errors[:,1,:]), alpha=0.5)
+    plt.yticks(ytix,ytix)
+    plt.ylim((np.nanmin(errors[:,0,:]), np.nanmax(errors[:,0,:])))
+    plt.title('Training Error')
+    # Plot test errors
+    plt.subplot(1, 2 ,2)
+    plt.semilogy(x, np.squeeze(errors[:,2,:]), alpha=0.5)
+    plt.legend(mlp_str)
+    plt.gca().set_color_cycle(None) #reset color cycle
+    plt.semilogy(x, np.squeeze(errors[:,3,:]), alpha=0.5)
+    plt.yticks(ytix,ytix)
+    plt.ylim((np.nanmin(errors[:,2,:]), np.nanmax(errors[:,2,:])))
+    plt.title('Testing Error')
     plt.show()
     fig.savefig(fig_dir + txt + '_score_history.png',bbox_inches='tight',dpi=450)
             
