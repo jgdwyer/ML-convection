@@ -7,11 +7,44 @@ import matplotlib.pyplot as plt
 
 # ---  BUILDING NEURAL NETS  --- #
 
+def train_nn_wrapper(hidneur,
+                     minlev=0.0,rainonly=False,data_dir='./data/'):
+    #Import packages
+    import numpy as np
+    from sklearn import preprocessing
+    import src.nnload as nnload
+    import src.nntrain as nntrain
+    # Load data
+    x, y, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev)
+    # Ensure that input and outputs are lined up in time!
+    x=x[1:,:]
+    y=y[0:-1,:]
+    # Print some statistics about rain and limit to when it's raining if True
+    x, y, Pout = nnload.limitrain(x, y, Pout, rainonly)
+    # Store when convection occurs
+    cv = nnload.whenconvection(y)
+    # Normalize input using the scikit-learn preprocessing tools
+    scaler_x = preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))
+    scaler_y = preprocessing.MaxAbsScaler()
+    # Randomly choose samples
+    samples = np.random.choice(x.shape[0], x.shape[0], replace=False)
+    x1,x2,x3    = nnload.pp(x,  samples, scaler_x)
+    y1,y2,y3    = nnload.pp(y,  samples, scaler_y)
+    cv1,cv2,cv3 = nnload.pp(cv, samples, None, scale_data=False)
+    # Build, train, and save model
+    r_mlp, r_str = nntrain.build_nn('regress',['Rectifier'],[hidneur],
+                                    'momentum',batch_size=100,n_stable=25)
+                                #, regularize = 'L2', weight_decay = 0.0001)
+    print(r_str)
+    r_mlp, r_errors = nntrain.train_nn(r_mlp,r_str,x1,y1,x2,y2)
+    pickle.dump([r_mlp, r_str, r_errors], 
+                open(data_dir + 'regressors/' + r_str + '.pkl', 'wb'))
+
 error=[]
 def store_stats( avg_train_error, best_train_error, avg_valid_error, best_valid_error,**_):
     error.append((avg_train_error, best_train_error, avg_valid_error, best_valid_error))
 
-def build_nn(method,actv_fnc,hid_neur,batch_size,learning_rule,n_iter=None, n_stable=None,
+def build_nn(method,actv_fnc,hid_neur,learning_rule,batch_size=100,n_iter=None, n_stable=None,
              learning_rate=0.01,learning_momentum=0.9,
              regularize = None, weight_decay = None, valid_size = 0.25):
     """Builds a multi-layer perceptron via the scikit neural network interface"""
