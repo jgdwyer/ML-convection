@@ -1,19 +1,17 @@
 import numpy as np
 import sknn.mlp
 import time
-from sklearn import metrics
+from sklearn import metrics, preprocessing
 import matplotlib.pyplot as plt
-
+import src.nnload as nnload
+import src.nntrain as nntrain
+import pickle
 
 # ---  BUILDING NEURAL NETS  --- #
 
 def train_nn_wrapper(hidneur,
                      minlev=0.0,rainonly=False,data_dir='./data/'):
     #Import packages
-    import numpy as np
-    from sklearn import preprocessing
-    import src.nnload as nnload
-    import src.nntrain as nntrain
     # Load data
     x, y, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev)
     # Ensure that input and outputs are lined up in time!
