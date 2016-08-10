@@ -1,12 +1,28 @@
 import numpy as np
 import matplotlib.pyplot as plt
-import src.nnload
+import src.nnload as nnload
 import scipy.stats 
-from sklearn import metrics
-unpack = src.nnload.unpack
+from sklearn import metrics, preprocessing
+unpack = nnload.unpack
 
 # ---   META PLOTTING SCRIPTS  --- #
 
+# Plot rmse vs lat
+def plot_rmse_vs_lat(r_mlp, figpath, data_dir='./data/', minlev=0.0, rainonly=False):
+    rmseT_nh, rmseT_sh, rmseq_nh, rmseq_sh, lat = _plot_rmse_vs_lat(r_mlp,data_dir='./data/',minlev=0.0,rainonly=False)
+    fig = plt.figure()
+    plt.subplot(2,1,1)
+    plt.plot(lat, rmseT_nh,label='NH')
+    plt.plot(lat, rmseT_sh,label='SH')
+    plt.title('Temp column RMSE')
+    plt.subplot(2,1,2)
+    plt.plot(lat, rmseq_nh, label='NH')
+    plt.plot(lat, rmseq_sh, label='SH')
+    plt.title('Humidity column RMSE')
+    plt.xlabel('Latitude')
+    plt.legend()
+    plt.show()
+    fig.savefig(figpath + 'rmse_vs_lat.png', bbox_inches='tight',dpi=450)
 # Plot means and standard deviations
 def plot_means_stds(y3_true, y3_pred, lev, figpath):
     fig = plt.figure()
@@ -14,7 +30,7 @@ def plot_means_stds(y3_true, y3_pred, lev, figpath):
     do_mean_or_std('mean','q',y3_true,y3_pred, lev, 2)
     do_mean_or_std('std','T',y3_true,y3_pred, lev, 3)
     do_mean_or_std('std','q',y3_true,y3_pred, lev, 4)
-    fig.savefig(figpath + 'regress_means_stds.png',bbox_inches='tight',dpi=450)
+    fig.savefig(figpath + 'regress_means_stds.png', bbox_inches='tight',dpi=450)
 
 # Plot correlation coefficient, explained variance, and rmse
 def plot_error_stats(y3_true, y3_pred, lev, figpath):
@@ -94,6 +110,32 @@ def plot_expl_var(y_true,y_pred,vari,lev, label=None):
     #plt.xlabel('(' + out_str_dict[vari] + ')$^2$')
     plt.title('Explained Variance Regression Score')
     
+def _plot_rmse_vs_lat(r_mlp,data_dir='./data/',minlev=0.0,rainonly=False):
+    # Load data
+    rmseT_all = np.zeros(64)
+    rmseq_all = np.zeros(64)
+    for i in range(64):
+        x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev,
+                                                           rainonly=rainonly ,all_lats=False,indlat=i,
+                                                            verbose=False) 
+        # Normalize input using the scikit-learn preprocessing tools
+        scaler_x = preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))
+        scaler_y = preprocessing.MaxAbsScaler()
+        # Randomly choose samples
+        samples = np.random.choice(x.shape[0], x.shape[0], replace=False)
+        x3,_,_    = nnload.pp(x,  samples, scaler_x)
+        y3,_,_    = nnload.pp(y,  samples, scaler_y)
+        y3_pred=r_mlp.predict(x3)
+        rmseT_all[i] = np.sum(np.sqrt(metrics.mean_squared_error(unpack(y3,'T'), unpack(y3_pred,'T'), 
+                       multioutput='raw_values')))
+        rmseq_all[i] = np.sum(np.sqrt(metrics.mean_squared_error(unpack(y3,'q'), unpack(y3_pred,'q'), 
+                       multioutput='raw_values')))
+        #rmse = rmse / np.mean(y3, axis=0)
+    # Separate hemispheres
+    rmseT_nh, rmseT_sh, lathalf = nnload.avg_hem(rmseT_all, lat, 0, split=True)
+    rmseq_nh, rmseq_sh, lathalf = nnload.avg_hem(rmseq_all, lat, 0, split=True)
+    return rmseT_nh.T, rmseT_sh.T, rmseq_nh.T, rmseq_sh.T, lathalf
+
 def _plot_enthalpy(y, dlev, label=None):
     k = calc_enthalpy(y, dlev)
     n, bins, patches = plt.hist(k, 50, alpha=0.5,label=label) #, facecolor='green'
