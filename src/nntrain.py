@@ -4,7 +4,6 @@ import time
 from sklearn import metrics, preprocessing
 import matplotlib.pyplot as plt
 import src.nnload as nnload
-import src.nntrain as nntrain
 import pickle
 
 # ---  BUILDING NEURAL NETS  --- #
@@ -30,11 +29,11 @@ def train_nn_wrapper(hidneur,
     y1,y2,y3    = nnload.pp(y,  samples, scaler_y)
     cv1,cv2,cv3 = nnload.pp(cv, samples, None, scale_data=False)
     # Build, train, and save model
-    r_mlp, r_str = nntrain.build_nn('regress',['Rectifier'],[hidneur],
+    r_mlp, r_str = build_nn('regress',['Rectifier'],[hidneur],
                                     'momentum',batch_size=100,n_stable=25)
                                 #, regularize = 'L2', weight_decay = 0.0001)
     print(r_str)
-    r_mlp, r_errors = nntrain.train_nn(r_mlp,r_str,x1,y1,x2,y2)
+    r_mlp, r_errors = train_nn(r_mlp,r_str,x1,y1,x2,y2)
     pickle.dump([r_mlp, r_str, r_errors], 
                 open(data_dir + 'regressors/' + r_str + '.pkl', 'wb'))
 
