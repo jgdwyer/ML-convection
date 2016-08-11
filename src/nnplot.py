@@ -6,10 +6,27 @@ from sklearn import metrics, preprocessing
 unpack = nnload.unpack
 
 # ---   META PLOTTING SCRIPTS  --- #
+#def plots_by_lat(scaler_x, scaler_y, r_mlp, lat):
+
+
+def plot_contour(T, q, lat, lev, avg_hem=False):
+    if avg_hem:
+        T, _ = nnload.avg_hem(T, lat, 1)
+        q, lat = nnload.avg_hem(q, lat, 1)
+    f, (ax1, ax2) = plt.subplots(2, sharex=True)
+    cax1 = ax1.contourf(lat, lev, T)
+    ax1.set_ylim(1,0)
+    f.colorbar(cax1,ax=ax1)
+    cax2 = ax2.contourf(lat, lev, q)
+    ax2.set_ylim(1,0)
+    f.colorbar(cax2,ax=ax2)
+    ax2.set_xlabel('Latitude')
+    return f, ax1, ax2 # return figure handle
 
 # Plot rmse vs lat
+# NEED TO FIX THIS SCRIPT
 def plot_rmse_vs_lat(r_mlp, figpath, data_dir='./data/', minlev=0.0, rainonly=False):
-    rmseT_nh, rmseT_sh, rmseq_nh, rmseq_sh, lat = _plot_rmse_vs_lat(r_mlp,data_dir='./data/',minlev=0.0,rainonly=False)
+    #rmseT_nh, rmseT_sh, rmseq_nh, rmseq_sh, lat = _plot_rmse_vs_lat(r_mlp,data_dir='./data/',minlev=0.0,rainonly=False)
     fig = plt.figure()
     plt.subplot(2,1,1)
     plt.plot(lat, rmseT_nh,label='NH')
@@ -110,32 +127,6 @@ def plot_expl_var(y_true,y_pred,vari,lev, label=None):
     #plt.xlabel('(' + out_str_dict[vari] + ')$^2$')
     plt.title('Explained Variance Regression Score')
     
-def _plot_rmse_vs_lat(r_mlp,data_dir='./data/',minlev=0.0,rainonly=False):
-    # Load data
-    rmseT_all = np.zeros(64)
-    rmseq_all = np.zeros(64)
-    for i in range(64):
-        x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev,
-                                                           rainonly=rainonly ,all_lats=False,indlat=i,
-                                                            verbose=False) 
-        # Normalize input using the scikit-learn preprocessing tools
-        scaler_x = preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))
-        scaler_y = preprocessing.MaxAbsScaler()
-        # Randomly choose samples
-        samples = np.random.choice(x.shape[0], x.shape[0], replace=False)
-        x3,_,_    = nnload.pp(x,  samples, scaler_x)
-        y3,_,_    = nnload.pp(y,  samples, scaler_y)
-        y3_pred=r_mlp.predict(x3)
-        rmseT_all[i] = np.sum(np.sqrt(metrics.mean_squared_error(unpack(y3,'T'), unpack(y3_pred,'T'), 
-                       multioutput='raw_values')))
-        rmseq_all[i] = np.sum(np.sqrt(metrics.mean_squared_error(unpack(y3,'q'), unpack(y3_pred,'q'), 
-                       multioutput='raw_values')))
-        #rmse = rmse / np.mean(y3, axis=0)
-    # Separate hemispheres
-    rmseT_nh, rmseT_sh, lathalf = nnload.avg_hem(rmseT_all, lat, 0, split=True)
-    rmseq_nh, rmseq_sh, lathalf = nnload.avg_hem(rmseq_all, lat, 0, split=True)
-    return rmseT_nh.T, rmseT_sh.T, rmseq_nh.T, rmseq_sh.T, lathalf
-
 def _plot_enthalpy(y, dlev, label=None):
     k = calc_enthalpy(y, dlev)
     n, bins, patches = plt.hist(k, 50, alpha=0.5,label=label) #, facecolor='green'

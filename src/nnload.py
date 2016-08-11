@@ -1,5 +1,7 @@
 import numpy as np
 from netCDF4 import Dataset
+from sklearn import preprocessing, metrics
+import scipy.stats
 
 def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbose=True):
     f = Dataset(filename, mode='r')
@@ -103,13 +105,39 @@ def unpack(data,vari,axis=1):
     out = np.take(data,varipos[vari],axis=axis)
     return out
 
-def pp(z,samples,scaler,scale_data=True):
+def pp(x, y, cv, num_samples, scaler_x=None, scaler_y=None):
+    """Preprocess data by scaling and splitting it into 3 equally sized samples"""
+    if num_samples==0: num_samples=x.shape[0]
+    # Randomly choose samples
+    samples = np.random.choice(x.shape[0], num_samples, replace=False)
+    # Scale input data
+    if scaler_x is None:
+        # If no scaler given, create one and fit and transform the data
+        scaler_x = preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))
+        x1,x2,x3    = _pp(x,  samples, scaler_x)
+    else: 
+        # If a scaler is given, use it to only transform the data
+        x1,x2,x3    = _pp(x,  samples, scaler_x, fit_data=False)
+    # Scale output data
+    if scaler_y is None:
+        # Since outputs are sparse, don't shift the mean
+        scaler_y = preprocessing.MaxAbsScaler()
+        y1,y2,y3    = _pp(y,  samples, scaler_y)
+    else:
+        y1,y2,y3    = _pp(y,  samples, scaler_y, fit_data=False)
+    # We don't need to scale the classification of convection
+    cv1,cv2,cv3 = _pp(cv, samples, None, transform_data=False)
+    return scaler_x, scaler_y, x1, x2, x3, y1, y2, y3, cv1, cv2, cv3
+
+def _pp(z, samples, scaler, transform_data=True, fit_data=True):
     """Preprocess data by scaling and splitting it into 3 equally sized samples"""
     # Scale data
-    if scale_data:
+    if (transform_data and fit_data):
         z = scaler.fit_transform(z)
+    if (transform_data and not fit_data):
+        z = scaler.transform(z)
     # Split data
-    ss = 10000 # number of samples in each set
+    ss = np.floor(len(samples)/3) # number of samples in each set
     z1 = np.take(z,samples[   0:  ss], axis=0)
     z2 = np.take(z,samples[  ss:2*ss], axis=0)
     z3 = np.take(z,samples[2*ss:3*ss], axis=0)
@@ -186,8 +214,8 @@ def write_netcdf_twolayer(mlp,method,filename):
 
 def avg_hem(data, lat, axis, split=False):
     """Averages the NH and SH data (or splits them into two data sets)"""
-    ixsh = np.where(lat<0)
-    ixnh = np.where(lat>=0)
+    ixsh = np.where(lat<0)[0] # where returns a tuple
+    ixnh = np.where(lat>=0)[0]
     if len(ixsh)==0:
         print(lat)
         ValueError('Appears that lat does not have SH values')
@@ -198,7 +226,48 @@ def avg_hem(data, lat, axis, split=False):
     shrev = np.swapaxes(np.swapaxes(sh, 0, axis)[::-1], 0, axis)
     # If splitting data, return these arrays
     if split:
-        return nh, sh, lathalf
+        return nh, shrev, lathalf
     else:
-        return (nh + sh) / 2., lathalf
-    
+        return (nh + shrev) / 2., lathalf
+
+def load_one_lat(scaler_x, scaler_y, r_mlp, indlat, data_dir='./data/', minlev=0., rainonly=False):
+    """Returns N_samples x 2*N_lev array of true and predicted values at a given latitude"""
+    # Load data
+    x, y, cv, Pout, lat, lev, dlev, timestep = loaddata(data_dir + 'nntest.nc', minlev,
+                                                           rainonly=rainonly ,all_lats=False,
+                                                           indlat=indlat, verbose=False)
+    _, _, x1, x2, x3, y1, y2, y3, cv1, cv2, cv3 = pp(x, y, cv, 0, scaler_x=scaler_x, scaler_y=scaler_y)
+    y3_pred=r_mlp.predict(x3)
+    # Inverse transform back to physical units
+    y3      = scaler_y.inverse_transform(y3)
+    y3_pred = scaler_y.inverse_transform(y3_pred)
+    T = unpack(y3,'T')
+    q = unpack(y3,'q')
+    T_pred = unpack(y3_pred,'T')
+    q_pred = unpack(y3_pred,'q')
+    return T, q, T_pred, q_pred
+
+def stats_by_latlev(scaler_x, scaler_y, r_mlp, lat, lev):
+    # Initialize
+    Tmean = np.zeros((len(lat),len(lev)))
+    qmean = np.zeros((len(lat),len(lev)))
+    rmseT = np.zeros((len(lat),len(lev)))
+    rmseq = np.zeros((len(lat),len(lev)))
+    rT    = np.zeros((len(lat),len(lev)))
+    rq    = np.zeros((len(lat),len(lev)))
+    rmseT_lat = np.zeros(len(lat))
+    rmseq_lat = np.zeros(len(lat))
+    for i in range(len(lat)):
+        T_true, q_true, T_pred, q_pred = load_one_lat(scaler_x, scaler_y, r_mlp, i)
+        # Get means of true output
+        Tmean[i,:] = np.mean(T_true,axis=0)
+        qmean[i,:] = np.mean(q_true,axis=0)
+        # Get rmse
+        rmseT[i,:] = np.sqrt(metrics.mean_squared_error(T_true, T_pred, multioutput='raw_values'))
+        rmseq[i,:] = np.sqrt(metrics.mean_squared_error(q_true, q_pred, multioutput='raw_values'))
+        # Get correlation coefficients
+        for j in range(len(lev)):
+            rT[i,j], _ = scipy.stats.pearsonr(T_true[:,j], T_pred[:,j])
+            rq[i,j], _ = scipy.stats.pearsonr(q_true[:,j], q_pred[:,j])
+
+    return Tmean.T, qmean.T, rmseT.T, rmseq.T, rT.T, rq.T
