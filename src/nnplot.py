@@ -8,6 +8,25 @@ unpack = nnload.unpack
 # ---   META PLOTTING SCRIPTS  --- #
 #def plots_by_lat(scaler_x, scaler_y, r_mlp, lat):
 
+def make_contour_plots(figpath, scaler_x, scaler_y, r_mlp_eval, lat, lev):
+    Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = nnload.stats_by_latlev(scaler_x, scaler_y, r_mlp_eval, lat, lev)
+    # Make figs
+    # True means
+    f,ax1,ax2 = plot_contour(Tmean,qmean,lat,lev, avg_hem=True)
+    ax1.set_title('Temperature True Mean [K/day]')
+    ax2.set_title('Humidity True Mean [kg/kg/day]')
+    # Bias from true mean
+    f,ax1,ax2 = plot_contour(Tbias,qbias,lat,lev, avg_hem=True)
+    ax1.set_title('Temperature Mean Bias [K/day]')
+    ax2.set_title('Humidity Mean Bias [kg/kg/day]')
+    # Root mean squared error
+    f,ax1,ax2 = plot_contour(rmseT,rmseq,lat,lev, avg_hem=True)
+    ax1.set_title('Temperature RMSE [K/day]')
+    ax2.set_title('Humidity RMSE [kg/kg/day]')
+    # Pearson r Correlation Coefficient
+    ax1.set_title('Temperature CorrelationCoefficient')
+    ax2.set_title('Humidity Correlation Coefficient')
+    f,ax1,ax2 = plot_contour(rT, rq, lat, lev, avg_hem=True)
 
 def plot_contour(T, q, lat, lev, avg_hem=False):
     if avg_hem:
@@ -16,9 +35,11 @@ def plot_contour(T, q, lat, lev, avg_hem=False):
     f, (ax1, ax2) = plt.subplots(2, sharex=True)
     cax1 = ax1.contourf(lat, lev, T)
     ax1.set_ylim(1,0)
+    ax1.set_ylabel(r'$\sigma$')
     f.colorbar(cax1,ax=ax1)
     cax2 = ax2.contourf(lat, lev, q)
     ax2.set_ylim(1,0)
+    ax2.set_ylabel(r'$\sigma$')
     f.colorbar(cax2,ax=ax2)
     ax2.set_xlabel('Latitude')
     return f, ax1, ax2 # return figure handle

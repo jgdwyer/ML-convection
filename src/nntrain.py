@@ -8,29 +8,17 @@ import pickle
 
 # ---  BUILDING NEURAL NETS  --- #
 
-def train_nn_wrapper(hidneur,
+def train_nn_wrapper(hidneur, n_iter=None, n_stable=None,
                      minlev=0.0,rainonly=False,data_dir='./data/'):
     #Import packages
     # Load data
-    x, y, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev)
-    # Ensure that input and outputs are lined up in time!
-    x=x[1:,:]
-    y=y[0:-1,:]
-    # Print some statistics about rain and limit to when it's raining if True
-    x, y, Pout = nnload.limitrain(x, y, Pout, rainonly)
-    # Store when convection occurs
-    cv = nnload.whenconvection(y)
-    # Normalize input using the scikit-learn preprocessing tools
-    scaler_x = preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))
-    scaler_y = preprocessing.MaxAbsScaler()
-    # Randomly choose samples
-    samples = np.random.choice(x.shape[0], x.shape[0], replace=False)
-    x1,x2,x3    = nnload.pp(x,  samples, scaler_x)
-    y1,y2,y3    = nnload.pp(y,  samples, scaler_y)
-    cv1,cv2,cv3 = nnload.pp(cv, samples, None, scale_data=False)
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev,
+                                                           rainonly=rainonly) #,all_lats=False,indlat=8)
+    # Preprocess data
+    scaler_x, scaler_y, x1, x2, x3, y1, y2, y3, cv1, cv2, cv3 = nnload.pp(x, y, cv, 30000)
     # Build, train, and save model
     r_mlp, r_str = build_nn('regress',['Rectifier'],[hidneur],
-                                    'momentum',batch_size=100,n_stable=25)
+                                    'momentum',batch_size=100,n_stable=n_stable,n_iter=n_iter)
                                 #, regularize = 'L2', weight_decay = 0.0001)
     print(r_str)
     r_mlp, r_errors = train_nn(r_mlp,r_str,x1,y1,x2,y2)
@@ -53,7 +41,8 @@ def build_nn(method,actv_fnc,hid_neur,learning_rule,batch_size=100,n_iter=None, 
         mlp = sknn.mlp.Regressor(layers,n_iter=n_iter,batch_size=batch_size,learning_rule=learning_rule,
                                  learning_rate=learning_rate,learning_momentum=learning_momentum,
                                  regularize = regularize, weight_decay = weight_decay, n_stable=n_stable,
-                                 valid_size=valid_size, callback={'on_epoch_finish': store_stats})
+                                 valid_size=valid_size, 
+                                 callback={'on_epoch_finish': store_stats})
     if method == 'classify':
         layers.append(sknn.mlp.Layer("Softmax"))
         mlp = sknn.mlp.Classifier(layers,n_iter=n_iter,batch_size=batch_size,learning_rule=learning_rule,
