@@ -16,31 +16,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbo
     #lev = f.variables['pfull'][:] / 1000. # sigma units
     f.close()
     # Use this to calculate the real sigma levels
-    half_lev=np.array([0.000000000000000e+00, 9.202000000000000e-03, 
-                       1.244200000000000e-02, 1.665600000000000e-02, 
-                       2.207400000000000e-02, 2.896500000000000e-02, 
-                       3.762800000000000e-02, 4.839600000000000e-02, 
-                       6.162600000000000e-02, 7.769200000000000e-02, 
-                       9.697200000000000e-02, 1.198320000000000e-01, 
-                       1.466070000000000e-01, 1.775800000000000e-01, 
-                       2.129570000000000e-01, 2.528400000000000e-01, 
-                       2.972050000000000e-01, 3.458790000000000e-01, 
-                       3.985190000000000e-01, 4.546020000000000e-01, 
-                       5.134170000000000e-01, 5.740720000000000e-01, 
-                       6.355060000000000e-01, 6.965140000000000e-01, 
-                       7.557840000000000e-01, 8.119360000000000e-01, 
-                       8.635820000000000e-01, 9.093730000000000e-01, 
-                       9.480640000000000e-01, 9.785660000000000e-01, 
-                       1.000000000000000e+00])
-    lev = np.array(np.zeros((half_lev.size-1,)))
-    for i in range(half_lev.size-1):
-        lev[i] = (half_lev[i] + half_lev[i+1])/2.
-    # Limit levels to those specified
-    indlev = np.greater(lev, minlev)
-    lev=lev[indlev]
-    # Calculate the distance between levels
-    dlev = np.diff(half_lev)
-    dlev = dlev[indlev]
+    lev, dlev, indlev = get_levs(minlev)    
     # Apply preprocessing to all data
     if all_lats:
         Tin =  prep_all_lats(Tin ,indlev)
@@ -105,43 +81,78 @@ def unpack(data,vari,axis=1):
     out = np.take(data,varipos[vari],axis=axis)
     return out
 
-def pp(x, y, cv, num_samples, scaler_x=None, scaler_y=None):
-    """Preprocess data by scaling and splitting it into 3 equally sized samples"""
-    if num_samples==0: num_samples=x.shape[0]
-    # Randomly choose samples
-    samples = np.random.choice(x.shape[0], num_samples, replace=False)
-    # Scale input data
-    if scaler_x is None:
-        # If no scaler given, create one and fit and transform the data
-        scaler_x = preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))
-        x1,x2,x3    = _pp(x,  samples, scaler_x)
-    else: 
-        # If a scaler is given, use it to only transform the data
-        x1,x2,x3    = _pp(x,  samples, scaler_x, fit_data=False)
-    # Scale output data
-    if scaler_y is None:
-        # Since outputs are sparse, don't shift the mean
-        scaler_y = preprocessing.MaxAbsScaler()
-        y1,y2,y3    = _pp(y,  samples, scaler_y)
+# Initialize & fit scaler
+def init_scaler(scaler_info, raw_data):
+    # Initialize list of scaler objects
+    if scaler_info['name'] is 'MinMax':
+        scaler =[preprocessing.MinMaxScaler(feature_range=(-1.0,1.0)), # for temperature
+                 preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))] # and humidity
+    elif scaler_info['name'] is 'MaxAbs':
+        scaler =[preprocessing.MaxAbsScaler(), # for temperature
+                 preprocessing.MaxAbsScaler()] # and humidity
     else:
-        y1,y2,y3    = _pp(y,  samples, scaler_y, fit_data=False)
-    # We don't need to scale the classification of convection
-    cv1,cv2,cv3 = _pp(cv, samples, None, transform_data=False)
-    return scaler_x, scaler_y, x1, x2, x3, y1, y2, y3, cv1, cv2, cv3
+        ValueError('Incorrect scaler name')
+    #Initialize scalers with data
+    if scaler_info['method'] is 'individually':
+        scaler[0].fit(unpack(raw_data,'T'))
+        scaler[1].fit(unpack(raw_data,'q'))
+    elif scaler_info['method'] is 'alltogether':
+        scaler[0].fit(np.reshape(unpack(raw_data,'T'), (-1,1)))
+        scaler[1].fit(np.reshape(unpack(raw_data,'q'), (-1,1)))
+    else:
+        ValueError('Incorrect scaler method')
+    return scaler 
 
-def _pp(z, samples, scaler, transform_data=True, fit_data=True):
-    """Preprocess data by scaling and splitting it into 3 equally sized samples"""
-    # Scale data
-    if (transform_data and fit_data):
-        z = scaler.fit_transform(z)
-    if (transform_data and not fit_data):
-        z = scaler.transform(z)
+# Transform data using initialized scaler
+def transform_data(scaler_info, scaler, raw_data):
+    if scaler_info['method'] is 'individually':
+        T_data = scaler[0].transform(unpack(raw_data,'T'))
+        q_data = scaler[1].transform(unpack(raw_data,'q'))
+    elif scaler_info['method'] is 'alltogether':
+        T_data = scaler[0].transform(np.reshape(unpack(raw_data,'T'), (-1,1)))
+        q_data = scaler[1].transform(np.reshape(unpack(raw_data,'q'), (-1,1)))
+        # Return to original shape (N_samples x N_features) rather than (N_s*N_f x 1)
+        shp = unpack(raw_data,'T').shape
+        T_data = np.reshape(T_data, shp)
+        q_data = np.reshape(q_data, shp)
+    else:
+        ValueError('Incorrect scaler method')
+    # Return single transformed array as output
+    return pack(T_data, q_data) 
+
+# Apply inverse transformation to unscale data
+def inverse_transform_data(scaler_info, scaler, trans_data): 
+    if scaler_info['method'] is 'individually':
+        T_data = scaler[0].inverse_transform(unpack(trans_data,'T'))
+        q_data = scaler[1].inverse_transform(unpack(trans_data,'q'))
+    elif scaler_info['method'] is 'alltogether':
+        T_data = scaler[0].inverse_transform(np.reshape(unpack(trans_data,'T'), (-1,1)))
+        q_data = scaler[1].inverse_transform(np.reshape(unpack(trans_data,'q'), (-1,1)))
+        # Return to original shape (N_samples x N_features) rather than (N_s*N_f x 1)
+        shp = unpack(trans_data,'T').shape
+        T_data = np.reshape(T_data, shp)
+        q_data = np.reshape(q_data, shp)
+    else:
+        ValueError('Incorrect scaler method')
+    # Return single transformed array as output
+    return pack(T_data, q_data) 
+
+def subsample(x, y, N_samples=0):
+    """Preprocess data by splitting it into 3 equally sized samples"""
+    if N_samples==0: N_samples = x.shape[0]
+    # Randomly choose samples
+    samples = np.random.choice(x.shape[0], N_samples, replace=False)
     # Split data
     ss = np.floor(len(samples)/3) # number of samples in each set
-    z1 = np.take(z,samples[   0:  ss], axis=0)
-    z2 = np.take(z,samples[  ss:2*ss], axis=0)
-    z3 = np.take(z,samples[2*ss:3*ss], axis=0)
-    return z1,z2,z3
+    def split_sample(z, samples, ss):
+        z1 = np.take(z,samples[   0:  ss], axis=0)
+        z2 = np.take(z,samples[  ss:2*ss], axis=0)
+        z3 = np.take(z,samples[2*ss:3*ss], axis=0)
+        return z1, z2, z3
+    # Apply to input and output data
+    x1, x2, x3 = split_sample(x, samples, ss)
+    y1, y2, y3 = split_sample(y, samples, ss)
+    return x1, x2, x3, y1, y2, y3
 
 def limitrain(x,y,Pout,rainonly=False, verbose=True):
     indrain = np.greater(Pout, 0)
@@ -251,6 +262,8 @@ def stats_by_latlev(scaler_x, scaler_y, r_mlp, lat, lev):
     # Initialize
     Tmean = np.zeros((len(lat),len(lev)))
     qmean = np.zeros((len(lat),len(lev)))
+    Tbias = np.zeros((len(lat),len(lev)))
+    qbias = np.zeros((len(lat),len(lev)))
     rmseT = np.zeros((len(lat),len(lev)))
     rmseq = np.zeros((len(lat),len(lev)))
     rT    = np.zeros((len(lat),len(lev)))
@@ -262,6 +275,9 @@ def stats_by_latlev(scaler_x, scaler_y, r_mlp, lat, lev):
         # Get means of true output
         Tmean[i,:] = np.mean(T_true,axis=0)
         qmean[i,:] = np.mean(q_true,axis=0)
+        # Get bias from means
+        Tbias[i,:] = np.mean(T_pred,axis=0) - Tmean[i,:]
+        qbias[i,:] = np.mean(q_pred,axis=0) - qmean[i,:]
         # Get rmse
         rmseT[i,:] = np.sqrt(metrics.mean_squared_error(T_true, T_pred, multioutput='raw_values'))
         rmseq[i,:] = np.sqrt(metrics.mean_squared_error(q_true, q_pred, multioutput='raw_values'))
@@ -270,4 +286,34 @@ def stats_by_latlev(scaler_x, scaler_y, r_mlp, lat, lev):
             rT[i,j], _ = scipy.stats.pearsonr(T_true[:,j], T_pred[:,j])
             rq[i,j], _ = scipy.stats.pearsonr(q_true[:,j], q_pred[:,j])
 
-    return Tmean.T, qmean.T, rmseT.T, rmseq.T, rT.T, rq.T
+    return Tmean.T, qmean.T, Tbias.T, qbias.T, rmseT.T, rmseq.T, rT.T, rq.T
+
+def get_levs(minlev):
+    # Define half sigma levels for data
+    half_lev = np.array([0.000000000000000e+00, 9.202000000000000e-03,
+                         1.244200000000000e-02, 1.665600000000000e-02,
+                         2.207400000000000e-02, 2.896500000000000e-02,
+                         3.762800000000000e-02, 4.839600000000000e-02,
+                         6.162600000000000e-02, 7.769200000000000e-02,
+                         9.697200000000000e-02, 1.198320000000000e-01,
+                         1.466070000000000e-01, 1.775800000000000e-01,
+                         2.129570000000000e-01, 2.528400000000000e-01,
+                         2.972050000000000e-01, 3.458790000000000e-01,
+                         3.985190000000000e-01, 4.546020000000000e-01,
+                         5.134170000000000e-01, 5.740720000000000e-01,
+                         6.355060000000000e-01, 6.965140000000000e-01,
+                         7.557840000000000e-01, 8.119360000000000e-01,
+                         8.635820000000000e-01, 9.093730000000000e-01,
+                         9.480640000000000e-01, 9.785660000000000e-01,
+                         1.000000000000000e+00])
+    # Calculate the full levels
+    lev = np.array(np.zeros((half_lev.size-1,)))
+    for i in range(half_lev.size-1):
+        lev[i] = (half_lev[i] + half_lev[i+1])/2.
+    # Limit levels to those specified
+    indlev = np.greater(lev, minlev)
+    lev = lev[indlev]
+    # Calculate the spacing between levels
+    dlev = np.diff(half_lev)
+    dlev = dlev[indlev]
+    return lev, dlev, indlev
