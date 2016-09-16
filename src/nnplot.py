@@ -6,10 +6,10 @@ from sklearn import metrics, preprocessing
 unpack = nnload.unpack
 
 # ---   META PLOTTING SCRIPTS  --- #
-#def plots_by_lat(scaler_x, scaler_y, r_mlp, lat):
+#def plots_by_lat(pp_x, pp_y, r_mlp, lat):
 
-def make_contour_plots(figpath, scaler_x, scaler_y, r_mlp_eval, lat, lev):
-    Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = nnload.stats_by_latlev(scaler_x, scaler_y, r_mlp_eval, lat, lev)
+def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev):
+    Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
     # Make figs
     # True means
     f,ax1,ax2 = plot_contour(Tmean,qmean,lat,lev, avg_hem=True)
@@ -24,9 +24,9 @@ def make_contour_plots(figpath, scaler_x, scaler_y, r_mlp_eval, lat, lev):
     ax1.set_title('Temperature RMSE [K/day]')
     ax2.set_title('Humidity RMSE [kg/kg/day]')
     # Pearson r Correlation Coefficient
+    f,ax1,ax2 = plot_contour(rT, rq, lat, lev, avg_hem=True)
     ax1.set_title('Temperature CorrelationCoefficient')
     ax2.set_title('Humidity Correlation Coefficient')
-    f,ax1,ax2 = plot_contour(rT, rq, lat, lev, avg_hem=True)
 
 def plot_contour(T, q, lat, lev, avg_hem=False):
     if avg_hem:
@@ -164,7 +164,7 @@ def _plot_precip(y_true,y_pred, dlev):
     plt.title('Precipitation Rate [mm/day]')
     plt.xlabel('Sorted by actual rate')
     
-def input_hist(x,y,vari):
+def input_hist(x, y, vari, lev):
     """Plot histograms of input and output data at each level (uses scaled inputs)"""
     plt.figure(figsize=(8,40))
     _,ax = plt.subplots(lev.size,2,sharex=True)
@@ -178,7 +178,9 @@ def input_hist(x,y,vari):
         ax[i,0].set_xlim((-1,1))
         ax[i,0].set_xlim((-1,1))
         ax[i,0].set_ylim(0,np.amax(n))
-        ax[i,1].set_ylim(0,np.amax(n2))
+        n2_alt = np.sort(n2)[-2]
+        # Tendencies are sparse, so 0-valued outputs are by far most common. Normalize by second largest value
+        ax[i,1].set_ylim(0,np.sort(n2)[-2])
     plt.show()
 
 

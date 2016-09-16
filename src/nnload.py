@@ -82,58 +82,59 @@ def unpack(data,vari,axis=1):
     return out
 
 # Initialize & fit scaler
-def init_scaler(scaler_info, raw_data):
+def init_pp(ppi, raw_data):
     # Initialize list of scaler objects
-    if scaler_info['name'] is 'MinMax':
-        scaler =[preprocessing.MinMaxScaler(feature_range=(-1.0,1.0)), # for temperature
+    if ppi['name'] == 'MinMax':
+        pp =[preprocessing.MinMaxScaler(feature_range=(-1.0,1.0)), # for temperature
                  preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))] # and humidity
-    elif scaler_info['name'] is 'MaxAbs':
-        scaler =[preprocessing.MaxAbsScaler(), # for temperature
+    elif ppi['name'] == 'MaxAbs':
+        pp =[preprocessing.MaxAbsScaler(), # for temperature
                  preprocessing.MaxAbsScaler()] # and humidity
     else:
         ValueError('Incorrect scaler name')
     #Initialize scalers with data
-    if scaler_info['method'] is 'individually':
-        scaler[0].fit(unpack(raw_data,'T'))
-        scaler[1].fit(unpack(raw_data,'q'))
-    elif scaler_info['method'] is 'alltogether':
-        scaler[0].fit(np.reshape(unpack(raw_data,'T'), (-1,1)))
-        scaler[1].fit(np.reshape(unpack(raw_data,'q'), (-1,1)))
+    if ppi['method'] == 'individually':
+        pp[0].fit(unpack(raw_data,'T'))
+        pp[1].fit(unpack(raw_data,'q'))
+    elif ppi['method'] == 'alltogether':
+        pp[0].fit(np.reshape(unpack(raw_data,'T'), (-1,1)))
+        pp[1].fit(np.reshape(unpack(raw_data,'q'), (-1,1)))
     else:
-        ValueError('Incorrect scaler method')
-    return scaler 
+        raise ValueError('Incorrect scaler method')
+    return pp 
 
 # Transform data using initialized scaler
-def transform_data(scaler_info, scaler, raw_data):
-    if scaler_info['method'] is 'individually':
-        T_data = scaler[0].transform(unpack(raw_data,'T'))
-        q_data = scaler[1].transform(unpack(raw_data,'q'))
-    elif scaler_info['method'] is 'alltogether':
-        T_data = scaler[0].transform(np.reshape(unpack(raw_data,'T'), (-1,1)))
-        q_data = scaler[1].transform(np.reshape(unpack(raw_data,'q'), (-1,1)))
+def transform_data(ppi, pp, raw_data):
+    if ppi['method'] == 'individually':
+        T_data = pp[0].transform(unpack(raw_data,'T'))
+        q_data = pp[1].transform(unpack(raw_data,'q'))
+    elif ppi['method'] == 'alltogether':
+        T_data = pp[0].transform(np.reshape(unpack(raw_data,'T'), (-1,1)))
+        q_data = pp[1].transform(np.reshape(unpack(raw_data,'q'), (-1,1)))
         # Return to original shape (N_samples x N_features) rather than (N_s*N_f x 1)
         shp = unpack(raw_data,'T').shape
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
     else:
-        ValueError('Incorrect scaler method')
+        print('Given method is ' + ppi['method'])
+        raise ValueError('Incorrect scaler method')
     # Return single transformed array as output
     return pack(T_data, q_data) 
 
 # Apply inverse transformation to unscale data
-def inverse_transform_data(scaler_info, scaler, trans_data): 
-    if scaler_info['method'] is 'individually':
-        T_data = scaler[0].inverse_transform(unpack(trans_data,'T'))
-        q_data = scaler[1].inverse_transform(unpack(trans_data,'q'))
-    elif scaler_info['method'] is 'alltogether':
-        T_data = scaler[0].inverse_transform(np.reshape(unpack(trans_data,'T'), (-1,1)))
-        q_data = scaler[1].inverse_transform(np.reshape(unpack(trans_data,'q'), (-1,1)))
+def inverse_transform_data(ppi, pp, trans_data): 
+    if ppi['method'] == 'individually':
+        T_data = pp[0].inverse_transform(unpack(trans_data,'T'))
+        q_data = pp[1].inverse_transform(unpack(trans_data,'q'))
+    elif ppi['method'] == 'alltogether':
+        T_data = pp[0].inverse_transform(np.reshape(unpack(trans_data,'T'), (-1,1)))
+        q_data = pp[1].inverse_transform(np.reshape(unpack(trans_data,'q'), (-1,1)))
         # Return to original shape (N_samples x N_features) rather than (N_s*N_f x 1)
         shp = unpack(trans_data,'T').shape
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
     else:
-        ValueError('Incorrect scaler method')
+        raise ValueError('Incorrect scaler method')
     # Return single transformed array as output
     return pack(T_data, q_data) 
 
@@ -179,6 +180,7 @@ def whenconvection(y, verbose=True):
     return cv
 
 def write_netcdf_twolayer(mlp,method,filename):
+    ValueError('This function needs to be rewritten to export the scaling with the new system')
     # Grab weights and input normalization
     w1 = mlp.get_parameters()[0].weights
     w2 = mlp.get_parameters()[1].weights
@@ -241,24 +243,25 @@ def avg_hem(data, lat, axis, split=False):
     else:
         return (nh + shrev) / 2., lathalf
 
-def load_one_lat(scaler_x, scaler_y, r_mlp, indlat, data_dir='./data/', minlev=0., rainonly=False):
+def load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, indlat, data_dir='./data/', minlev=0., rainonly=False):
     """Returns N_samples x 2*N_lev array of true and predicted values at a given latitude"""
     # Load data
     x, y, cv, Pout, lat, lev, dlev, timestep = loaddata(data_dir + 'nntest.nc', minlev,
                                                            rainonly=rainonly ,all_lats=False,
                                                            indlat=indlat, verbose=False)
-    _, _, x1, x2, x3, y1, y2, y3, cv1, cv2, cv3 = pp(x, y, cv, 0, scaler_x=scaler_x, scaler_y=scaler_y)
-    y3_pred=r_mlp.predict(x3)
-    # Inverse transform back to physical units
-    y3      = scaler_y.inverse_transform(y3)
-    y3_pred = scaler_y.inverse_transform(y3_pred)
-    T = unpack(y3,'T')
-    q = unpack(y3,'q')
-    T_pred = unpack(y3_pred,'T')
-    q_pred = unpack(y3_pred,'q')
+
+    # Calculate predicted output
+    x = transform_data(x_ppi, x_pp, x)
+    y_pred = r_mlp.predict(x)
+    y_pred = inverse_transform_data(y_ppi, y_pp, y_pred)
+    # Output true and predicted temperature and humidity tendencies
+    T = unpack(y,'T')
+    q = unpack(y,'q')
+    T_pred = unpack(y_pred,'T')
+    q_pred = unpack(y_pred,'q')
     return T, q, T_pred, q_pred
 
-def stats_by_latlev(scaler_x, scaler_y, r_mlp, lat, lev):
+def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev):
     # Initialize
     Tmean = np.zeros((len(lat),len(lev)))
     qmean = np.zeros((len(lat),len(lev)))
@@ -271,7 +274,8 @@ def stats_by_latlev(scaler_x, scaler_y, r_mlp, lat, lev):
     rmseT_lat = np.zeros(len(lat))
     rmseq_lat = np.zeros(len(lat))
     for i in range(len(lat)):
-        T_true, q_true, T_pred, q_pred = load_one_lat(scaler_x, scaler_y, r_mlp, i)
+        print(i)
+        T_true, q_true, T_pred, q_pred = load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, i)
         # Get means of true output
         Tmean[i,:] = np.mean(T_true,axis=0)
         qmean[i,:] = np.mean(q_true,axis=0)
