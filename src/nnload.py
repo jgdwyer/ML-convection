@@ -90,6 +90,12 @@ def init_pp(ppi, raw_data):
     elif ppi['name'] == 'MaxAbs':
         pp =[preprocessing.MaxAbsScaler(), # for temperature
                  preprocessing.MaxAbsScaler()] # and humidity
+    elif ppi['name'] == 'StandardScaler':
+        pp =[preprocessing.StandardScaler(), # for temperature
+                 preprocessing.StandardScaler()] # and humidity
+    elif ppi['name'] == 'RobustScaler':
+        pp =[preprocessing.RobustScaler(), # for temperature
+                 preprocessing.RobustScaler()] # and humidity
     else:
         ValueError('Incorrect scaler name')
     #Initialize scalers with data
@@ -99,6 +105,9 @@ def init_pp(ppi, raw_data):
     elif ppi['method'] == 'alltogether':
         pp[0].fit(np.reshape(unpack(raw_data,'T'), (-1,1)))
         pp[1].fit(np.reshape(unpack(raw_data,'q'), (-1,1)))
+    elif ppi['method'] == 'qTindividually':
+        pp = pp[0]
+        pp.fit(raw_data)
     else:
         raise ValueError('Incorrect scaler method')
     return pp 
@@ -115,6 +124,10 @@ def transform_data(ppi, pp, raw_data):
         shp = unpack(raw_data,'T').shape
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
+    elif ppi['method'] == 'qTindividually':
+        all_data = pp.transform(raw_data)
+        T_data = unpack(all_data, 'T')
+        q_data = unpack(all_data, 'q')
     else:
         print('Given method is ' + ppi['method'])
         raise ValueError('Incorrect scaler method')
@@ -133,6 +146,10 @@ def inverse_transform_data(ppi, pp, trans_data):
         shp = unpack(trans_data,'T').shape
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
+    elif ppi['method'] == 'qTindividually':
+        all_data = pp.inverse_transform(trans_data)
+        T_data = unpack(all_data, 'T')
+        q_data = unpack(all_data, 'q')
     else:
         raise ValueError('Incorrect scaler method')
     # Return single transformed array as output
@@ -144,7 +161,7 @@ def subsample(x, y, N_samples=0):
     # Randomly choose samples
     samples = np.random.choice(x.shape[0], N_samples, replace=False)
     # Split data
-    ss = np.floor(len(samples)/3) # number of samples in each set
+    ss = int(np.floor(len(samples)/3)) # number of samples in each set
     def split_sample(z, samples, ss):
         z1 = np.take(z,samples[   0:  ss], axis=0)
         z2 = np.take(z,samples[  ss:2*ss], axis=0)
