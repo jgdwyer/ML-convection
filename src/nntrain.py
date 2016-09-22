@@ -8,28 +8,37 @@ import pickle
 
 # ---  BUILDING NEURAL NETS  --- #
 
-def train_nn_wrapper(hidneur, n_iter=None, n_stable=None,
+def train_nn_wrapper(hidneur, x_ppi, y_ppi, n_iter=None, n_stable=None,
                      minlev=0.0,rainonly=False,data_dir='./data/'):
-    #Import packages
     # Load data
-    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev,
-                                                           rainonly=rainonly) #,all_lats=False,indlat=8)
-    # Preprocess data
-    scaler_x, scaler_y, x1, x2, x3, y1, y2, y3, cv1, cv2, cv3 = nnload.pp(x, y, cv, 30000)
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'nntest.nc', minlev, rainonly=rainonly) 
+    # Transform data according to input preprocessor
+    x_pp = nnload.init_pp(x_ppi, x)
+    x    = nnload.transform_data(x_ppi, x_pp, x)
+    y_pp = nnload.init_pp(y_ppi, y)
+    y    = nnload.transform_data(y_ppi, y_pp, y)
+    # Make preprocessor string for saving
+    pp_str =          'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
+    pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
+    # Subsample data
+    x1, x2, x3, y1, y2, y3 = nnload.subsample(x, y, N_samples=10000)
     # Build, train, and save model
     r_mlp, r_str = build_nn('regress',['Rectifier'],[hidneur],
-                                    'momentum',batch_size=100,n_stable=n_stable,n_iter=n_iter)
+                                    'momentum', pp_str, batch_size=100,n_stable=n_stable,n_iter=n_iter)
                                 #, regularize = 'L2', weight_decay = 0.0001)
     print(r_str)
     r_mlp, r_errors = train_nn(r_mlp,r_str,x1,y1,x2,y2)
-    pickle.dump([r_mlp, r_str, r_errors], 
+    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev], 
                 open(data_dir + 'regressors/' + r_str + '.pkl', 'wb'))
+    return r_str, x3, y3
 
-error=[]
-def store_stats( avg_train_error, best_train_error, avg_valid_error, best_valid_error,**_):
-    error.append((avg_train_error, best_train_error, avg_valid_error, best_valid_error))
+def store_stats(i, avg_train_error, best_train_error, avg_valid_error, best_valid_error,**_):
+    if i==1: 
+        global errors_stored
+        errors_stored = []
+    errors_stored.append((avg_train_error, best_train_error, avg_valid_error, best_valid_error))
 
-def build_nn(method,actv_fnc,hid_neur,learning_rule,batch_size=100,n_iter=None, n_stable=None,
+def build_nn(method,actv_fnc,hid_neur,learning_rule, pp_str, batch_size=100,n_iter=None, n_stable=None,
              learning_rate=0.01,learning_momentum=0.9,
              regularize = None, weight_decay = None, valid_size = 0.25):
     """Builds a multi-layer perceptron via the scikit neural network interface"""
@@ -51,8 +60,9 @@ def build_nn(method,actv_fnc,hid_neur,learning_rule,batch_size=100,n_iter=None, 
                                  valid_size=valid_size, callback={'on_epoch_finish': store_stats})
     #Write nn string
     layerstr='_'.join([str(h)+f[0] for h,f in zip(hid_neur,actv_fnc)])
-    mlp_str = method[0] + "_" +  layerstr + "_" + learning_rule[0:3] + "{}".format(str(learning_momentum) if learning_rule=='momentum'
-                                                                      else str(learning_rate))
+    mlp_str = pp_str + method[0] + "_" +  layerstr + "_" + learning_rule[0:3] + \
+              "{}".format(str(learning_momentum) if learning_rule=='momentum'
+                                                 else str(learning_rate))
     if regularize is not None:
         mlp_str = mlp_str + 'reg' + str(weight_decay)
     return mlp,mlp_str
@@ -79,52 +89,26 @@ def build_randomforest(method,mlp,mlp_str):
         mlp_str.append(method[0] + '_RF_' + str(estimator))
     return mlp, mlp_str
 
-def train_nn(mlp,mlp_str,x1,cv1,x2,cv2,y2=None):
+def train_nn(mlp,mlp_str,x1,y1,x2,y2):
     """Train each item in a list of multi-layer perceptrons and then score on test data"""
     # Expects a mulit-layer perceptron object
     # Initialize
     n_iter = mlp.n_iter
     start = time.time()
     # Train the model using training data
-    mlp.fit(x1,cv1)
-    train_score = mlp.score(x1, np.squeeze(cv1))
-    test_score  = mlp.score(x2, np.squeeze(cv2))
+    mlp.fit(x1,y1)
+    train_score = mlp.score(x1, np.squeeze(y1))
+    test_score  = mlp.score(x2, np.squeeze(y2))
     end = time.time()
     print("Training Score: {:.4f}, Test Score: {:.4f} for Model {:s} ({:.1f} seconds)".format(
                                               train_score, test_score, mlp_str, end-start))
-    errors = np.asarray(error) # This is an N_iter x 4 array...see score_stats
+    errors = np.asarray(errors_stored) # This is an N_iter x 4 array...see score_stats
     # Return the fitted models and the scores
     return mlp, errors
 
 
 # ---  EVALUATING NEURAL NETS  --- #
 
-def plot_model_error_over_time(errors, mlp_str, fig_dir, txt):
-    x = np.arange(errors.shape[0])
-    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
-    # Plot error rate vs. iteration number
-    fig=plt.figure()
-    # Plot training errors
-    ax1=plt.subplot(1, 2 ,1)
-    plt.semilogy(x, np.squeeze(errors[:,0,:]), alpha=0.5)
-    plt.legend(mlp_str)
-    plt.gca().set_color_cycle(None) #reset color cycle
-    plt.semilogy(x, np.squeeze(errors[:,1,:]), alpha=0.5)
-    plt.yticks(ytix,ytix)
-    plt.ylim((np.nanmin(errors[:,0,:]), np.nanmax(errors[:,0,:])))
-    plt.title('Training Error')
-    # Plot test errors
-    plt.subplot(1, 2 ,2)
-    plt.semilogy(x, np.squeeze(errors[:,2,:]), alpha=0.5)
-    plt.legend(mlp_str)
-    plt.gca().set_color_cycle(None) #reset color cycle
-    plt.semilogy(x, np.squeeze(errors[:,3,:]), alpha=0.5)
-    plt.yticks(ytix,ytix)
-    plt.ylim((np.nanmin(errors[:,2,:]), np.nanmax(errors[:,2,:])))
-    plt.title('Testing Error')
-    plt.show()
-    fig.savefig(fig_dir + txt + '_score_history.png',bbox_inches='tight',dpi=450)
-            
 def plot_regressors_scores(r_list,r_str,x_test,y_true, fig_dir, txt):
     """Given a list of fitted regressor objects, compare their skill on a variety of tests"""
     mse=[]
@@ -146,7 +130,7 @@ def plot_regressors_scores(r_list,r_str,x_test,y_true, fig_dir, txt):
     tick=range(len(mse))
     # Plot mean squared error
     plt.yticks(tick, r_str)
-    plt.plot(mse, tick, marker='o',)
+    plt.semilogx(mse, tick, marker='o',)
     plt.title('Mean Squared Error')
     # Plot R2 
     plt.subplot(1,2,2)
@@ -155,6 +139,7 @@ def plot_regressors_scores(r_list,r_str,x_test,y_true, fig_dir, txt):
     plt.setp(plt.gca().get_yticklabels(), visible=False)
     plt.legend(loc="upper left")
     plt.title('R^2 score')
+    plt.xlim((-1,1))
     fig.savefig(fig_dir + txt + '_scores.png',bbox_inches='tight',dpi=450)
 
 def classify(classifier,x,y):
