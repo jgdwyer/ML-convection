@@ -1,12 +1,58 @@
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import src.nnload as nnload
 import scipy.stats 
 from sklearn import metrics, preprocessing
+import pickle
+import os
 unpack = nnload.unpack
 
 # ---   META PLOTTING SCRIPTS  --- #
 #def plots_by_lat(pp_x, pp_y, r_mlp, lat):
+
+def plot_all_figs(r_str, x_scl, ytrue_scl):
+    r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+    # Set figure path and create directory if it does not exist
+    figpath = './figs/' + r_str + '/'
+    if not os.path.exists(figpath):
+        os.makedirs(figpath)
+
+    # Plot model errors over iteration history
+    plot_model_error_over_time(errors, r_str, figpath)
+
+    # Inverse transform to get unscaled (untransformed) data in physical units
+    x_unscl     = nnload.inverse_transform_data(x_ppi, x_pp, x_scl)
+    ytrue_unscl = nnload.inverse_transform_data(y_ppi, y_pp, ytrue_scl)
+
+    # Use algorithm to get predicted output
+    ypred_scl   = r_mlp_eval.predict(x_scl)
+    ypred_unscl = nnload.inverse_transform_data(y_ppi, y_pp, ypred_scl)
+
+    # Plot historgram showing how scaling changed character of input and output data
+    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat, lev, figpath)
+ 
+    # Plot histogram showing how well true and predicted values match
+    check_output_distribution(ytrue_unscl, ytrue_scl, ypred_unscl, ypred_scl, lat, lev, figpath)
+
+    # Plot means and standard deviations
+    plot_means_stds(ytrue_unscl, ypred_unscl, lev, figpath)
+
+    # Plot correlation coefficient, explained variance, and rmse
+    plot_error_stats(ytrue_unscl, ypred_unscl, lev, figpath)
+
+    # Plot a time series of precipitaiton
+    plot_precip(ytrue_unscl, ypred_unscl, dlev, figpath)
+
+    # Plot the enthalpy conservation
+    plot_enthalpy(ytrue_unscl, ypred_unscl, dlev, figpath)
+
+    # Plot mean, bias, rmse, r^  (lat vs lev)
+    make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
+
+    # Plot the rmse vs lat
+    #nnplot.plot_rmse_vs_lat(r
 
 def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev):
     Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
@@ -59,7 +105,6 @@ def plot_rmse_vs_lat(r_mlp, figpath, data_dir='./data/', minlev=0.0, rainonly=Fa
     plt.title('Humidity column RMSE')
     plt.xlabel('Latitude')
     plt.legend()
-    plt.show()
     fig.savefig(figpath + 'rmse_vs_lat.png', bbox_inches='tight',dpi=450)
 # Plot means and standard deviations
 def plot_means_stds(y3_true, y3_pred, lev, figpath):
@@ -90,7 +135,6 @@ def plot_error_stats(y3_true, y3_pred, lev, figpath):
 def plot_precip(y3_true, y3_pred, dlev, figpath):
     fig = plt.figure()
     _plot_precip(y3_true,y3_pred, dlev)
-    plt.show()
     fig.savefig(figpath + 'regress_P_rate.png',bbox_inches='tight',dpi=450)
 
 # Plot the enthalpy conservation
@@ -102,7 +146,6 @@ def plot_enthalpy(y3_true, y3_pred, dlev, figpath):
     plt.subplot(2,1,2)
     _plot_enthalpy(y3_pred, dlev, label='predict')
     plt.legend(loc="upper left")
-    plt.show()
     fig.savefig(figpath + 'regress_enthalpy.png',bbox_inches='tight',dpi=450)
 
 
@@ -163,26 +206,78 @@ def _plot_precip(y_true,y_pred, dlev):
     plt.legend(loc="upper left")
     plt.title('Precipitation Rate [mm/day]')
     plt.xlabel('Sorted by actual rate')
-    
-def input_hist(x, y, vari, lev):
-    """Plot histograms of input and output data at each level (uses scaled inputs)"""
-    plt.figure(figsize=(8,40))
-    _,ax = plt.subplots(lev.size,2,sharex=True)
-    for i in range(lev.size):
-        step=.05
-        bins=np.arange(-1,1+step,step)
-        n,bins,_   = ax[i,0].hist(unpack(x,vari)[:,i],bins=bins,facecolor='yellow',alpha=0.5,normed=True)
-        n2,bins2,_ = ax[i,1].hist(unpack(y,vari)[:,i],bins=bins,facecolor='blue'  ,alpha=0.5,normed=True)
-        ax[i,0].get_yaxis().set_visible(False)
-        ax[i,1].get_yaxis().set_visible(False)
-        ax[i,0].set_xlim((-1,1))
-        ax[i,0].set_xlim((-1,1))
-        ax[i,0].set_ylim(0,np.amax(n))
-        n2_alt = np.sort(n2)[-2]
-        # Tendencies are sparse, so 0-valued outputs are by far most common. Normalize by second largest value
-        ax[i,1].set_ylim(0,np.sort(n2)[-2])
-    plt.show()
 
+def check_scaling_distribution(x_unscl, x_scl, y_unscl, y_scl, lat, lev, figpath):
+    # For input variables
+    fig, ax = plt.subplots(2, 2)
+    _plot_distribution(unpack(x_unscl,'T'), lat, lev, fig, ax[0,0], './figs/','T (unscaled) [K]','')
+    _plot_distribution(unpack(x_scl,  'T'), lat, lev, fig, ax[0,1], './figs/','T (scaled) []','')
+    _plot_distribution(unpack(x_unscl,'q'), lat, lev, fig, ax[1,0], './figs/','q (unscaled) [g/kg]','')
+    _plot_distribution(unpack(x_scl,  'q'), lat, lev, fig, ax[1,1], './figs/','q (scaled) []','')
+    fig.savefig(figpath + 'input_scaling_check.png',bbox_inches='tight',dpi=450)
+    # For output variables
+    fig, ax = plt.subplots(2, 2)
+    _plot_distribution(unpack(y_unscl,'T'), lat, lev, fig, ax[0,0], './figs/','T tend (unscaled) [K/day]','')
+    _plot_distribution(unpack(y_scl,  'T'), lat, lev, fig, ax[0,1], './figs/','T tend (scaled) []','')
+    _plot_distribution(unpack(y_unscl,'q'), lat, lev, fig, ax[1,0], './figs/','q tend (unscaled) [g/kg/day]','')
+    _plot_distribution(unpack(y_scl,  'q'), lat, lev, fig, ax[1,1], './figs/','q tend(scaled) []','')
+    fig.savefig(figpath + 'output_scaling_check.png',bbox_inches='tight',dpi=450)
+
+def check_output_distribution(yt_unscl, yt_scl, yp_unscl, yp_scl, lat, lev, figpath):
+    # For unscaled variables
+    fig, ax = plt.subplots(2, 2)
+    _plot_distribution(unpack(yt_unscl,'T'), lat, lev, fig, ax[0,0], './figs/','T true (unscld) [K/day]','')
+    _plot_distribution(unpack(yp_unscl,'T'), lat, lev, fig, ax[0,1], './figs/','T pred (unscld) [K/day]','')
+    _plot_distribution(unpack(yt_unscl,'q'), lat, lev, fig, ax[1,0], './figs/','q true (unscld) [g/kg/day]','')
+    _plot_distribution(unpack(yp_unscl,'q'), lat, lev, fig, ax[1,1], './figs/','q pred (unscld) [g/kg/day]','')
+    fig.savefig(figpath + 'output_compare_true_pred_unscaled.png',bbox_inches='tight',dpi=450)
+    # For scaled variables
+    fig, ax = plt.subplots(2, 2)
+    _plot_distribution(unpack(yt_scl,'T'), lat, lev, fig, ax[0,0], './figs/','T true (scld) []','')
+    _plot_distribution(unpack(yp_scl,'T'), lat, lev, fig, ax[0,1], './figs/','T pred (scld) []','')
+    _plot_distribution(unpack(yt_scl,'q'), lat, lev, fig, ax[1,0], './figs/','q true (scld) []','')
+    _plot_distribution(unpack(yp_scl,'q'), lat, lev, fig, ax[1,1], './figs/','q pred (scld) []','')
+    fig.savefig(figpath + 'output_compare_true_pred_scaled.png',bbox_inches='tight',dpi=450)
+        
+
+def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr):
+    """Plots a stack of histograms of log10(data) at all levels"""
+    # Initialize the bins and the frequency 
+    num_bins = 100
+    bins = np.linspace(np.amin(z), np.amax(z), num_bins+1)
+    n = np.zeros((num_bins, lev.size))
+    # Calculate distribution at each level 
+    for i in range(lev.size):
+        n[:,i], _ = np.histogram(z[:,i], bins=bins)
+    bins=bins[:-1]
+    # Take a logarithm and deal with case where we take log of 0
+    n = np.log10(n)
+    n_small = np.amin(n[np.isfinite(n)])
+    n[np.isinf(n)]  = n_small
+    # Plot histogram
+    ca = ax.contourf(bins, lev, n.T)
+    ax.set_ylim(1,0)
+    plt.colorbar(ca, ax=ax)
+    ax.set_xlabel(xstr)
+    ax.set_ylabel(r'$\sigma$')
+    ax.set_title(titlestr)
+
+def plot_model_error_over_time(errors, mlp_str, fig_dir):
+    x = np.arange(errors.shape[0])
+    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
+    # Plot error rate vs. iteration number
+    fig=plt.figure()
+    # Plot training errors
+    plt.semilogy(x, np.squeeze(errors[:,0]), alpha=0.5,color='blue',label='Training')
+    plt.semilogy(x, np.squeeze(errors[:,1]), alpha=0.5,color='blue')
+    plt.yticks(ytix,ytix)
+    plt.ylim((np.nanmin(errors), np.nanmax(errors)))
+    plt.semilogy(x, np.squeeze(errors[:,2]), alpha=0.5,label='Testing',color='green')
+    plt.semilogy(x, np.squeeze(errors[:,3]), alpha=0.5,color='green')
+    plt.legend()
+    plt.title('Error for ' + mlp_str)
+    plt.xlabel('Iteration Number')
+    fig.savefig(fig_dir + 'error_history.png',bbox_inches='tight',dpi=450)
 
 # ----  HELPER SCRIPTS  ---- # 
     
