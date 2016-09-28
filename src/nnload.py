@@ -5,7 +5,30 @@ import scipy.stats
 import pickle
 
 def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbose=True):
-    """v2 of the script to load data. See prep_convection_output.py"""
+    """v2 of the script to load data. See prep_convection_output.py for how 
+       the input filename is generated.
+
+    Args:
+        filename: The file to be loaded. Use convection_50day.pkl  or convection_50day_validation.pkl
+        minlev:   The topmost model level for which to load data. Set to 0. to load all data.
+        all_lats: Logical value for whether to load data from all latitudes. 
+        indlat:   If all_lats is false, give the index value [0-31] for the latitude at which to load data.
+        rainonly: If true, only return training examples of whet it is raining.
+        verbose:  Not functional now.
+
+    Returns:
+        x       : 2-d numpy array of input features (m_training examples x N_input features). If minlev is 0., 
+                  there will be 60 input features, the top 30 for temperature and the bottom 30 for humidity.
+        y       : 2-d numpy array of output targets (m_traning examples x N_output targets). If minlev is 0.,
+                  there will be 60 output features, the top 30 for temp. tendencies and the bottom 30 for q tend.
+        cv      : 1-d array (m_training examples x 1) that gives 1 if convection occurs and 0 if it does not.
+        Pout    : 1-d arrray (m_training examples x 1) of how much precipitation occurs in kg/m^2/s 
+                  (multiply by 3600*24 to convert precipitation to mm/day)
+        lat2    : 1-d array of latitude for one hemisphere (since hemispheres are combined)
+        lev     : The vertical model levels (1 is the surface and 0 is the top of the atmosphere).
+        dlev    : The difference between model levels, useful for calculating some derived quantities.
+        timestep: How large each model timestep is in seconds.
+    """
     # Data to read in is N_lev x N_lat (SH & NH) x N_samples
     # Samples are quasi indpendent with only 10 from each latitude range chosen 
     # randomly over different longitudes and times within that 24 hour period.
@@ -13,7 +36,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbo
     [Tin, qin, Tout, qout, Pout, lat]=pickle.load(open(filename, 'rb'),encoding='latin1')
     # Use this to calculate the real sigma levels
     lev, dlev, indlev = get_levs(minlev)
-    # Comine NH & SH data
+    # Comine NH & SH data since they are statistically equivalent
     [Tin, lat2] = avg_hem(Tin, lat, axis=1)
     [qin, lat2] = avg_hem(qin, lat, axis=1)
     [Tout,lat2] = avg_hem(Tout,lat, axis=1)
