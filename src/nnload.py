@@ -2,8 +2,51 @@ import numpy as np
 from netCDF4 import Dataset
 from sklearn import preprocessing, metrics
 import scipy.stats
+import pickle
 
 def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbose=True):
+    """v2 of the script to load data. See prep_convection_output.py"""
+    # Data to read in is N_lev x N_lat (SH & NH) x N_samples
+    # Samples are quasi indpendent with only 10 from each latitude range chosen 
+    # randomly over different longitudes and times within that 24 hour period.
+    # Need to use encoding because saved using python2: http://stackoverflow.com/q/28218466
+    [Tin, qin, Tout, qout, Pout, lat]=pickle.load(open(filename, 'rb'),encoding='latin1')
+    # Use this to calculate the real sigma levels
+    lev, dlev, indlev = get_levs(minlev)
+    # Comine NH & SH data
+    [Tin, lat2] = avg_hem(Tin, lat, axis=1)
+    [qin, lat2] = avg_hem(qin, lat, axis=1)
+    [Tout,lat2] = avg_hem(Tout,lat, axis=1)
+    [qout,lat2] = avg_hem(qout,lat, axis=1)
+    # Change shape of data to be N_samp x N_lev
+    if all_lats:
+        Tin = reshape_all_lats(Tin, indlev)
+        qin = reshape_all_lats(qin, indlev)
+        Tout= reshape_all_lats(Tout,indlev)
+        qout= reshape_all_lats(qout,indlev)
+    else:
+        if indlat is not None:
+            Tin = reshape_one_lat(Tin, indlev, indlat)
+            qin = reshape_one_lat(qin, indlev, indlat)
+            Tout= reshape_one_lat(Tout,indlev, indlat)
+            qout= reshape_one_lat(qout,indlev, indlat)
+            Pout = Pout[indlat,:]
+        else:
+            raise TypeError('Need to set an index value for indlat')
+    Pout = np.reshape(Pout,-1)
+    timestep = 10*60 # 10 minute timestep
+    # Converted heating rates to K/day and g/kg/day in prep_convection_output.py
+    # Concatenate input and output variables together
+    x = pack(Tin,  qin , axis=1)
+    y = pack(Tout, qout, axis=1)
+    # The outputs get lined up in prep_convection_output.py
+    # Print some statistics about rain and limit to when it's raining if True
+    x, y, Pout = limitrain(x, y, Pout, rainonly, verbose=verbose)
+    # Store when convection occurs
+    cv,_ = whenconvection(y, verbose=verbose)
+    return (x, y, cv, Pout, lat2, lev, dlev, timestep)
+
+def _loaddata_old(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbose=True):
     f = Dataset(filename, mode='r')
     timestep = 10*60 # 10 minute timestep
     # Read the data
@@ -33,7 +76,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbo
             qout = prep(qout,indlev, indlat)
             Pout = prep(Pout,indlev, indlat)
         else:
-            raise TypeError('Need to set an index value for indlat')    
+            raise TypeError('Need to set an index value for indlat')
     # Convert heating rates to K/day and g/kg/day
     Tout = Tout*3600.*24.
     qout = qout*3600.*24.*1000.
@@ -51,17 +94,29 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbo
     cv = whenconvection(y, verbose=verbose)
     return (x, y, cv, Pout, lat, lev, dlev, timestep)
 
-def prep(M,indlev,indlat):
+def reshape_all_lats(z, indlev): 
+    # Expects data to be N_lev x N_lat x N_samples and returns (N_lat*N_samp x N_lev)
+    z = z[indlev,:,:]
+    z = z.swapaxes(0,2)
+    return np.reshape(z, (-1, sum(indlev)))
+def reshape_one_lat(z, indlev, indlat):
+    # Expects data to be N_lev x N_lat x N_samples and returns (N_samp x N_lev)
+    z = z[indlev,indlat,:]
+    z = z.swapaxes(0,1)
+    return np.reshape(z, (-1, sum(indlev)))
+
+def _prep_old(M,indlev,indlat):
     if M.ndim == 4:
         M = M[:,indlev,indlat,:].squeeze()
         M = M.swapaxes(1,2) # N_time x N_lon x N_lev 
-        M = np.reshape(M, (-1, len(indlev))) #Now N_time*N_lon x N_lev
+        # Need to do sum of indlev because it is a logical vector
+        M = np.reshape(M, (-1, sum(indlev))) #Now N_time*N_lon x N_lev
     elif M.ndim == 3:
         M = M[:,indlat,:]
         M = np.reshape(M,-1)
     return M
 
-def prep_all_lats(M,indlev):
+def _prep_all_lats_old(M,indlev):
     if M.ndim == 4: #Ntime x Nlev x Nlat x Nlon
         M = M[:,indlev,:,:]
         M = M.swapaxes(1,3)
@@ -190,11 +245,12 @@ def limitrain(x,y,Pout,rainonly=False, verbose=True):
 def whenconvection(y, verbose=True):
     """Caluclate how often convection occurs...useful for classification
        Also store a variable that is 1 if convection and 0 if no convection"""
-    cv = np.sum(np.abs(unpack(y, 'T')), axis=1)
+    cv_strength = np.sum(np.abs(unpack(y, 'T')), axis=1)
+    cv = np.copy(cv_strength)
     cv[cv > 0] = 1
     if verbose:
         print('There is convection %.1f%% of the time' %(100.*np.sum(cv)/len(cv)))
-    return cv
+    return cv, cv_strength
 
 def write_netcdf_twolayer(mlp,method,filename):
     ValueError('This function needs to be rewritten to export the scaling with the new system')
@@ -263,7 +319,7 @@ def avg_hem(data, lat, axis, split=False):
 def load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, indlat, data_dir='./data/', minlev=0., rainonly=False):
     """Returns N_samples x 2*N_lev array of true and predicted values at a given latitude"""
     # Load data
-    x, y, cv, Pout, lat, lev, dlev, timestep = loaddata(data_dir + 'nntest.nc', minlev,
+    x, y, cv, Pout, lat, lev, dlev, timestep = loaddata(data_dir + 'convection_50day.pkl', minlev,
                                                            rainonly=rainonly ,all_lats=False,
                                                            indlat=indlat, verbose=False)
 
@@ -292,7 +348,7 @@ def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev):
     rmseq_lat = np.zeros(len(lat))
     for i in range(len(lat)):
         print(i)
-        T_true, q_true, T_pred, q_pred = load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, i)
+        T_true, q_true, T_pred, q_pred = load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, i, minlev=np.min(lev))
         # Get means of true output
         Tmean[i,:] = np.mean(T_true,axis=0)
         qmean[i,:] = np.mean(q_true,axis=0)
@@ -332,7 +388,7 @@ def get_levs(minlev):
     for i in range(half_lev.size-1):
         lev[i] = (half_lev[i] + half_lev[i+1])/2.
     # Limit levels to those specified
-    indlev = np.greater(lev, minlev)
+    indlev = np.greater_equal(lev, minlev)
     lev = lev[indlev]
     # Calculate the spacing between levels
     dlev = np.diff(half_lev)
