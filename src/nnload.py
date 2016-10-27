@@ -174,6 +174,8 @@ def init_pp(ppi, raw_data):
     elif ppi['name'] == 'RobustScaler':
         pp =[preprocessing.RobustScaler(), # for temperature
                  preprocessing.RobustScaler()] # and humidity
+    elif ppi['name'] == 'SimpleY':
+        pp =[15.,10.] # for temperature
     else:
         ValueError('Incorrect scaler name')
     #Initialize scalers with data
@@ -184,8 +186,9 @@ def init_pp(ppi, raw_data):
         pp[0].fit(np.reshape(unpack(raw_data,'T'), (-1,1)))
         pp[1].fit(np.reshape(unpack(raw_data,'q'), (-1,1)))
     elif ppi['method'] == 'qTindividually':
-        pp = pp[0]
-        pp.fit(raw_data)
+        if ppi['name'] != 'SimpleY':
+            pp = pp[0]
+            pp.fit(raw_data)
     else:
         raise ValueError('Incorrect scaler method')
     return pp 
@@ -203,9 +206,15 @@ def transform_data(ppi, pp, raw_data):
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
     elif ppi['method'] == 'qTindividually':
-        all_data = pp.transform(raw_data)
-        T_data = unpack(all_data, 'T')
-        q_data = unpack(all_data, 'q')
+        if ppi['name'] == 'SimpleY':
+            print(pp)
+            print(type(pp))
+            T_data = unpack(raw_data, 'T')/pp[0]
+            q_data = unpack(raw_data, 'q')/pp[1]
+        else:
+            all_data = pp.transform(raw_data)
+            T_data = unpack(all_data, 'T')
+            q_data = unpack(all_data, 'q')
     else:
         print('Given method is ' + ppi['method'])
         raise ValueError('Incorrect scaler method')
@@ -225,9 +234,13 @@ def inverse_transform_data(ppi, pp, trans_data):
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
     elif ppi['method'] == 'qTindividually':
-        all_data = pp.inverse_transform(trans_data)
-        T_data = unpack(all_data, 'T')
-        q_data = unpack(all_data, 'q')
+        if ppi['name'] == 'SimpleY':
+            T_data = unpack(trans_data,'T') * pp[0]
+            q_data = unpack(trans_data,'q') * pp[1]
+        else:
+            all_data = pp.inverse_transform(trans_data)
+            T_data = unpack(all_data, 'T')
+            q_data = unpack(all_data, 'q')
     else:
         raise ValueError('Incorrect scaler method')
     # Return single transformed array as output
@@ -274,6 +287,39 @@ def whenconvection(y, verbose=True):
     if verbose:
         print('There is convection %.1f%% of the time' %(100.*np.sum(cv)/len(cv)))
     return cv, cv_strength
+
+def write_netcdf_onelayer(mlp, x_pp, y_pp, filename='/Users/jgdwyer/neural_weights_v2.nc'):
+    # Grab weights and input normalization
+    w1 = mlp.get_parameters()[0].weights
+    w2 = mlp.get_parameters()[1].weights
+    b1 = mlp.get_parameters()[0].biases
+    b2 = mlp.get_parameters()[1].biases
+    xscale_mean = x_pp.mean_
+    xscale_stnd = x_pp.scale_
+    yscale_absmax = y_pp.max_abs_
+    # Write weights to file
+    ncfile = Dataset(filename,'w')
+    # Write the dimensions
+    ncfile.createDimension('N_in',     w1.shape[0])
+    ncfile.createDimension('N_h1',     w1.shape[1])
+    ncfile.createDimension('N_out',    w2.shape[1])
+    # Create variable entries in the file
+    nc_w1 = ncfile.createVariable('w1',np.dtype('float64').char,('N_h1','N_in'    )) #Reverse dims
+    nc_w2 = ncfile.createVariable('w2',np.dtype('float64').char,('N_out','N_h1'     ))
+    nc_b1 = ncfile.createVariable('b1',np.dtype('float64').char,('N_h1'))
+    nc_b2 = ncfile.createVariable('b2',np.dtype('float64').char,('N_out'))
+    nc_xscale_mean = ncfile.createVariable('xscale_mean',np.dtype('float64').char,('N_in'))
+    nc_xscale_stnd = ncfile.createVariable('xscale_stnd',np.dtype('float64').char,('N_in'))
+    nc_yscale_absmax = ncfile.createVariable('yscale_absmax',np.dtype('float64').char,('N_out'))
+    # Write variables and close file - transpose because fortran reads it in "backwards"
+    nc_w1[:] = w1.T
+    nc_w2[:] = w2.T
+    nc_b1[:] = b1
+    nc_b2[:] = b2
+    nc_xscale_mean[:] = xscale_mean
+    nc_xscale_stnd[:] = xscale_stnd
+    nc_yscale_absmax[:] = yscale_absmax
+    ncfile.close()
 
 def write_netcdf_twolayer(mlp,method,filename):
     ValueError('This function needs to be rewritten to export the scaling with the new system')
@@ -385,7 +431,6 @@ def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev):
         for j in range(len(lev)):
             rT[i,j], _ = scipy.stats.pearsonr(T_true[:,j], T_pred[:,j])
             rq[i,j], _ = scipy.stats.pearsonr(q_true[:,j], q_pred[:,j])
-
     return Tmean.T, qmean.T, Tbias.T, qbias.T, rmseT.T, rmseq.T, rT.T, rq.T
 
 def get_levs(minlev):
