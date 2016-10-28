@@ -35,25 +35,25 @@ def plot_all_figs(r_str, datasource='./data/convection_50day_validation.pkl', va
     ypred_unscl = nnload.inverse_transform_data(y_ppi, y_pp, ypred_scl)
     # Do plotting
     # Plot model errors over iteration history
-#    plot_model_error_over_time(errors, r_str, figpath)
+    plot_model_error_over_time(errors, r_str, figpath)
     # Plot historgram showing how scaling changed character of input and output data
-#    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat, lev, figpath)
+    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat, lev, figpath)
     # Plot histogram showing how well true and predicted values match
-#    check_output_distribution(ytrue_unscl, ytrue_scl, ypred_unscl, ypred_scl, lat, lev, figpath)
+    check_output_distribution(ytrue_unscl, ytrue_scl, ypred_unscl, ypred_scl, lat, lev, figpath)
     # Plot means and standard deviations
-#    plot_means_stds(ytrue_unscl, ypred_unscl, lev, figpath)
+    plot_means_stds(ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot correlation coefficient, explained variance, and rmse
-#    plot_error_stats(ytrue_unscl, ypred_unscl, lev, figpath)
+    plot_error_stats(ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot a "time series" of precipitaiton
-#    plot_precip(ytrue_unscl, ypred_unscl, dlev, figpath)
+    plot_precip(ytrue_unscl, ypred_unscl, dlev, figpath)
     # Plot a scatter plot of true vs predicted precip
     plot_scatter(ytrue_unscl, ypred_unscl, lev, dlev, figpath)
     # Plot the enthalpy conservation
-#    plot_enthalpy(ytrue_unscl, ypred_unscl, dlev, figpath)
+    plot_enthalpy(ytrue_unscl, ypred_unscl, dlev, figpath)
     # Plot some example profiles
-#    plot_sample_profiles(20, x_unscl, ytrue_unscl, ypred_unscl, lev, figpath)
+    plot_sample_profiles(20, x_unscl, ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot mean, bias, rmse, r^2  (lat vs lev)
-#    make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
+    make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
 
 def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev):
     Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
