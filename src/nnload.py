@@ -4,120 +4,90 @@ from sklearn import preprocessing, metrics
 import scipy.stats
 import pickle
 
-def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbose=True):
-    """v2 of the script to load data. See prep_convection_output.py for how 
+def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False,
+             noshallow=False, verbose=True):
+    """v2 of the script to load data. See prep_convection_output.py for how
        the input filename is generated.
 
     Args:
-        filename: The file to be loaded. Use convection_50day.pkl  or convection_50day_validation.pkl
-        minlev:   The topmost model level for which to load data. Set to 0. to load all data.
-        all_lats: Logical value for whether to load data from all latitudes. 
-        indlat:   If all_lats is false, give the index value [0-31] for the latitude at which to load data.
-        rainonly: If true, only return training examples of whet it is raining.
-        verbose:  Not functional now.
+        filename:  The file to be loaded. Use convection_50day.pkl  or
+                   convection_50day_validation.pkl
+        minlev:    The topmost model level for which to load data. Set to 0. to
+                   load all data
+        all_lats:  Logical value for whether to load data from all latitudes
+        indlat:    If all_lats is false, give the index value [0-31] for the
+                   latitude at which to load data.
+        rainonly:  If true, only return training examples of when it is raining
+        noshallow: If true, only return training examples of when the shallow
+                   convection scheme does NOT happen. (So, only return examples
+                   with deep convection, or no convection at all)
+        verbose:   If true, prints some basic stats about training set
 
     Returns:
-        x       : 2-d numpy array of input features (m_training examples x N_input features). If minlev is 0., 
-                  there will be 60 input features, the top 30 for temperature and the bottom 30 for humidity.
-        y       : 2-d numpy array of output targets (m_traning examples x N_output targets). If minlev is 0.,
-                  there will be 60 output features, the top 30 for temp. tendencies and the bottom 30 for q tend.
-        cv      : 1-d array (m_training examples x 1) that gives 1 if convection occurs and 0 if it does not.
-        Pout    : 1-d arrray (m_training examples x 1) of how much precipitation occurs in kg/m^2/s 
-                  (multiply by 3600*24 to convert precipitation to mm/day)
-        lat2    : 1-d array of latitude for one hemisphere (since hemispheres are combined)
-        lev     : The vertical model levels (1 is the surface and 0 is the top of the atmosphere).
-        dlev    : The difference between model levels, useful for calculating some derived quantities.
+        x       : 2-d numpy array of input features (m_training examples x
+                  N_input features). If minlev is 0., there will be 60 input
+                  features, the top 30 for temperature and the bottom 30 for
+                  humidity.
+        y       : 2-d numpy array of output targets (m_traning examples x
+                  N_output targets). If minlev is 0., there will be 60 output
+                  features, the top 30 for temp. tendencies and the bottom 30
+                  for q tend.
+        cv      : 1-d array (m_training examples x 1) that gives 1 if convection
+                  occurs and 0 if it does not.
+        Pout    : 1-d arrray (m_training examples x 1) of how much precipitation
+                  occurs in kg/m^2/s (multiply by 3600*24 to convert
+                  precipitation to mm/day)
+        lat2    : 1-d array of latitude for one hemisphere (since hemispheres
+                  are combined)
+        lev     : The vertical model levels (1 is the surface and 0 is the top
+                  of the atmosphere).
+        dlev    : The difference between model levels, useful for calculating
+                  some derived quantities.
         timestep: How large each model timestep is in seconds.
     """
     # Data to read in is N_lev x N_lat (SH & NH) x N_samples
-    # Samples are quasi indpendent with only 10 from each latitude range chosen 
+    # Samples are quasi indpendent with only 10 from each latitude range chosen
     # randomly over different longitudes and times within that 24 hour period.
     # Need to use encoding because saved using python2: http://stackoverflow.com/q/28218466
-    [Tin, qin, Tout, qout, Pout, lat]=pickle.load(open(filename, 'rb'),encoding='latin1')
+    v = dict()
+    [v['Tin'], v['qin'], v['Tout'], v['qout'], Pout, lat] = \
+                          pickle.load(open(filename, 'rb'), encoding='latin1')
     # Use this to calculate the real sigma levels
     lev, dlev, indlev = get_levs(minlev)
     # Comine NH & SH data since they are statistically equivalent
-    [Tin, lat2] = avg_hem(Tin, lat, axis=1)
-    [qin, lat2] = avg_hem(qin, lat, axis=1)
-    [Tout,lat2] = avg_hem(Tout,lat, axis=1)
-    [qout,lat2] = avg_hem(qout,lat, axis=1)
-    # Change shape of data to be N_samp x N_lev
-    if all_lats:
-        Tin = reshape_all_lats(Tin, indlev)
-        qin = reshape_all_lats(qin, indlev)
-        Tout= reshape_all_lats(Tout,indlev)
-        qout= reshape_all_lats(qout,indlev)
-    else:
-        if indlat is not None:
-            Tin = reshape_one_lat(Tin, indlev, indlat)
-            qin = reshape_one_lat(qin, indlev, indlat)
-            Tout= reshape_one_lat(Tout,indlev, indlat)
-            qout= reshape_one_lat(qout,indlev, indlat)
-            Pout = Pout[indlat,:]
+    varis = ['Tin', 'qin', 'Tout', 'qout']
+    for var in varis:
+        [v[var], lat2] = avg_hem(v[var], lat, axis=1)
+        # Change shape of data to be N_samp x N_lev
+        if all_lats:
+            v[var] = reshape_all_lats(v[var], indlev)
         else:
-            raise TypeError('Need to set an index value for indlat')
-    Pout = np.reshape(Pout,-1)
+            if indlat is not None:
+                v[var] = reshape_one_lat(v[var], indlev, indlat)
+                # Pout = Pout[indlat,:]
+            else:
+                raise TypeError('Need to set an index value for indlat')
+    # print(Pout.shape)
+    # print(v['Tin'].shape)
+    # Pout = np.reshape(Pout,-1)
+    # print(Pout.shape)
+    # print('hey')
     timestep = 10*60 # 10 minute timestep
     # Converted heating rates to K/day and g/kg/day in prep_convection_output.py
     # Concatenate input and output variables together
-    x = pack(Tin,  qin , axis=1)
-    y = pack(Tout, qout, axis=1)
+    x = pack(v['Tin'],  v['qin'] , axis=1)
+    y = pack(v['Tout'], v['qout'], axis=1)
+    import src.nnplot as nnplot
+    Pout2 = nnplot.calc_precip(y, dlev)
     # The outputs get lined up in prep_convection_output.py
     # Print some statistics about rain and limit to when it's raining if True
-    x, y, Pout = limitrain(x, y, Pout, rainonly, verbose=verbose)
+    x, y, Pout2 = limitrain(x, y, Pout2, rainonly, noshallow=noshallow,
+                           verbose=verbose)
     # Store when convection occurs
     cv,_ = whenconvection(y, verbose=verbose)
-    return (x, y, cv, Pout, lat2, lev, dlev, timestep)
+    return (x, y, cv, Pout2, lat2, lev, dlev, timestep)
 
-def _loaddata_old(filename, minlev, all_lats=True, indlat=None, rainonly=False, verbose=True):
-    f = Dataset(filename, mode='r')
-    timestep = 10*60 # 10 minute timestep
-    # Read the data
-    Tin = f.variables['temp'][:] # N_time x N_lev x N_lat x N_lon
-    qin = f.variables['sphum'][:] 
-    Tout= f.variables['dt_tg_convection'][:]
-    qout= f.variables['dt_qg_convection'][:]
-    Pout= f.variables['convection_rain'][:] # N_time x N_lat x N_lon
-    lat = f.variables['lat'][:]
-    #lev = f.variables['pfull'][:] / 1000. # sigma units
-    f.close()
-    # Use this to calculate the real sigma levels
-    lev, dlev, indlev = get_levs(minlev)    
-    # Apply preprocessing to all data
-    if all_lats:
-        Tin =  prep_all_lats(Tin ,indlev)
-        qin =  prep_all_lats(qin ,indlev)
-        Tout = prep_all_lats(Tout,indlev)
-        qout = prep_all_lats(qout,indlev)
-        Pout = prep_all_lats(Pout,indlev)
-    # Or data at just one latitude
-    else:
-        if indlat is not None:
-            Tin =  prep(Tin ,indlev, indlat)
-            qin =  prep(qin ,indlev, indlat)
-            Tout = prep(Tout,indlev, indlat)
-            qout = prep(qout,indlev, indlat)
-            Pout = prep(Pout,indlev, indlat)
-        else:
-            raise TypeError('Need to set an index value for indlat')
-    # Convert heating rates to K/day and g/kg/day
-    Tout = Tout*3600.*24.
-    qout = qout*3600.*24.*1000.
-    # Concatenate input and output variables together
-    x = pack(Tin,  qin , axis=1)
-    y = pack(Tout, qout, axis=1)
-    # Ensure that input and outputs are lined up in time (and warn user)
-    import warnings
-    warnings.warn("Shifting inputs and outputs one time step so they line up!")
-    x=x[1:,:]
-    y=y[0:-1,:]
-    # Print some statistics about rain and limit to when it's raining if True
-    x, y, Pout = limitrain(x, y, Pout, rainonly, verbose=verbose)
-    # Store when convection occurs
-    cv = whenconvection(y, verbose=verbose)
-    return (x, y, cv, Pout, lat, lev, dlev, timestep)
-
-def reshape_all_lats(z, indlev): 
+def reshape_all_lats(z, indlev):
     # Expects data to be N_lev x N_lat x N_samples and returns (N_lat*N_samp x N_lev)
     z = z[indlev,:,:]
     z = z.swapaxes(0,2)
@@ -131,7 +101,7 @@ def reshape_one_lat(z, indlev, indlat):
 def _prep_old(M,indlev,indlat):
     if M.ndim == 4:
         M = M[:,indlev,indlat,:].squeeze()
-        M = M.swapaxes(1,2) # N_time x N_lon x N_lev 
+        M = M.swapaxes(1,2) # N_time x N_lon x N_lev
         # Need to do sum of indlev because it is a logical vector
         M = np.reshape(M, (-1, sum(indlev))) #Now N_time*N_lon x N_lev
     elif M.ndim == 3:
@@ -191,7 +161,7 @@ def init_pp(ppi, raw_data):
             pp.fit(raw_data)
     else:
         raise ValueError('Incorrect scaler method')
-    return pp 
+    return pp
 
 # Transform data using initialized scaler
 def transform_data(ppi, pp, raw_data):
@@ -207,8 +177,6 @@ def transform_data(ppi, pp, raw_data):
         q_data = np.reshape(q_data, shp)
     elif ppi['method'] == 'qTindividually':
         if ppi['name'] == 'SimpleY':
-            print(pp)
-            print(type(pp))
             T_data = unpack(raw_data, 'T')/pp[0]
             q_data = unpack(raw_data, 'q')/pp[1]
         else:
@@ -219,10 +187,10 @@ def transform_data(ppi, pp, raw_data):
         print('Given method is ' + ppi['method'])
         raise ValueError('Incorrect scaler method')
     # Return single transformed array as output
-    return pack(T_data, q_data) 
+    return pack(T_data, q_data)
 
 # Apply inverse transformation to unscale data
-def inverse_transform_data(ppi, pp, trans_data): 
+def inverse_transform_data(ppi, pp, trans_data):
     if ppi['method'] == 'individually':
         T_data = pp[0].inverse_transform(unpack(trans_data,'T'))
         q_data = pp[1].inverse_transform(unpack(trans_data,'q'))
@@ -244,7 +212,7 @@ def inverse_transform_data(ppi, pp, trans_data):
     else:
         raise ValueError('Incorrect scaler method')
     # Return single transformed array as output
-    return pack(T_data, q_data) 
+    return pack(T_data, q_data)
 
 def subsample(x, y, N_samples=0):
     """Preprocess data by splitting it into 3 equally sized samples"""
@@ -263,12 +231,12 @@ def subsample(x, y, N_samples=0):
     y1, y2, y3 = split_sample(y, samples, ss)
     return x1, x2, x3, y1, y2, y3
 
-def limitrain(x,y,Pout,rainonly=False, verbose=True):
+def limitrain(x,y,Pout, rainonly=False, noshallow=False, verbose=True):
     indrain = np.greater(Pout, 0)
     if verbose:
-        print('There is some amount of rain %.1f%% of the time' 
+        print('There is some amount of rain %.1f%% of the time'
           %(100.*np.sum(indrain)/len(indrain)))
-        print('There is a rate of >3 mm/day %.1f%% of the time' 
+        print('There is a rate of >3 mm/day %.1f%% of the time'
           %(100.*np.sum(np.greater(Pout*3600.*24.,3))/len(indrain)))
     if rainonly:
         x = x[indrain,:]
@@ -276,6 +244,14 @@ def limitrain(x,y,Pout,rainonly=False, verbose=True):
         Pout = Pout[indrain]
         if verbose:
             print('Only looking at times it is raining!')
+    if noshallow:
+        cv, _  = whenconvection(y, verbose=True)
+        indnosha = np.logical_or(Pout > 0, cv == 0)
+        x = x[indnosha,:]
+        y = y[indnosha,:]
+        Pout = Pout[indnosha]
+        if verbose:
+            print('Excluding all shallow convective events...')
     return x, y, Pout
 
 def whenconvection(y, verbose=True):
@@ -373,7 +349,7 @@ def avg_hem(data, lat, axis, split=False):
     ixnh = np.where(lat>=0)[0]
     if len(ixsh)==0:
         print(lat)
-        ValueError('Appears that lat does not have SH values')
+        raise ValueError('Appears that lat does not have SH values')
     lathalf = lat[ixnh]
     sh = np.take(data, ixsh, axis=axis)
     nh = np.take(data, ixnh, axis=axis)
