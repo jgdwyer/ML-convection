@@ -7,12 +7,13 @@ import pickle
 import src.nnplot as nnplot
 
 # ---  BUILDING NEURAL NETS  --- #
-
 def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=None,
                      minlev=0.0,rainonly=False,data_dir='./data/',
-                     use_weights=False, weight_decay = 0.0):
+                     use_weights=False, weight_decay = 0.0, noshallow=False):
     # Load training data
-    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + 'convection_50day.pkl', minlev, rainonly=rainonly) 
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + \
+                            'convection_50day.pkl', minlev, rainonly=rainonly,
+                            noshallow=noshallow)
     # Set up weights for training examples
     if use_weights:
         #_,convection_strength = nnload.whenconvection(y)
@@ -52,22 +53,25 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=No
     # Train neural network
     r_mlp, r_errors = train_nn(r_mlp, r_str, x1, y1, w)
     # Save neural network
-    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev], 
+    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev],
                 open(data_dir + 'regressors/' + r_str + '.pkl', 'wb'))
     # Plot figures (with validation data)
-    nnplot.plot_all_figs(r_str)
-    nnplot.plot_all_figs(r_str, datasource='./data/convection_50day.pkl', validation=False)
+    nnplot.plot_all_figs(r_str, noshallow=noshallow, rainonly=rainonly)
+    nnplot.plot_all_figs(r_str, datasource='./data/convection_50day.pkl',
+                          validation=False, noshallow=noshallow, rainonly=rainonly)
     return r_str
 
 def store_stats(i, avg_train_error, best_train_error, avg_valid_error, best_valid_error,**_):
-    if i==1: 
+    if i==1:
         global errors_stored
         errors_stored = []
     errors_stored.append((avg_train_error, best_train_error, avg_valid_error, best_valid_error))
 
-def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str, batch_size=100,n_iter=None, n_stable=None,
-             learning_rate=0.01,learning_momentum=0.9,
-             regularize = 'L2', weight_decay = 0.0, valid_size = 0.25, f_stable=.001):
+def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
+             batch_size=100, n_iter=None, n_stable=None,
+             learning_rate=0.01, learning_momentum=0.9,
+             regularize='L2', weight_decay=0.0, valid_size=0.25,
+             f_stable=.001):
     """Builds a multi-layer perceptron via the scikit neural network interface"""
     # First build layers
     actv_fnc = num_layers*[actv_fnc]
@@ -98,18 +102,18 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str, batc
 
 
 def build_randomforest(method,mlp,mlp_str):
-    methods = {'classify':RandomForestClassifier,'regress':RandomForestRegressor}
-    estimators = {'classify':[200,50,20],'regress':[200,50,20]}
+    methods = {'classify':RandomForestClassifier,
+                'regress':RandomForestRegressor}
+    estimators = {'classify':[200,50,20], 'regress':[200,50,20]}
     for estimator in estimators[method]:
         mlp.append(methods[method](n_estimators=estimator))
         mlp_str.append(method[0] + '_RF_' + str(estimator))
     return mlp, mlp_str
 
 def train_nn(mlp,mlp_str,x,y, w=None):
-    """Train each item in a list of multi-layer perceptrons and then score on test data"""
-    # Expects a mulit-layer perceptron object
+    """Train each item in a list of multi-layer perceptrons and then score
+    on test data. Expects that mlp is a list of MLP objects"""
     # Initialize
-    n_iter = mlp.n_iter
     start = time.time()
     # Train the model using training data
     mlp.fit(x, y, w)
@@ -125,9 +129,9 @@ def train_nn(mlp,mlp_str,x,y, w=None):
 # ---  EVALUATING NEURAL NETS  --- #
 
 def classify(classifier,x,y):
-    """Applies a trained classifier to input x and y and 
+    """Applies a trained classifier to input x and y and
     outputs data when classifier expects convection is occurring."""
-    # Apply classifier 
+    # Apply classifier
     out = classifier.predict(x)
     # Get samples of when classifier predicts that it is convecting
     ind = np.squeeze(np.not_equal(out,0))
@@ -135,9 +139,10 @@ def classify(classifier,x,y):
     x = x[ind,:]
     y = y[ind,:]
     return x,y
-             
+
 def plot_classifier_hist(pred,y,tistr):
-    """Make histograms of the classification scores binned by the 'strength' of the convection
+    """Make histograms of the classification scores binned by the
+        'strength' of the convection
     Inputs: pred  - predicted classification   (N_samples x 1)
             y     - true T,q tendencies        (N_samples x N_features)
             tistr - used as title and filename (str)"""
@@ -164,14 +169,15 @@ def plot_classifier_hist(pred,y,tistr):
     plt.title(tistr)
     plt.xlabel('"Intensity" of Convection')
     # Write overall statistics including how well we do at classifying when convection does not occur
-    plt.gca().text(.1,.5,'Classifier correctly predicts convection: %.1f%% of time (it convects %.1f%% of time)' 
+    plt.gca().text(.1,.5,'Classifier correctly predicts convection: %.1f%% of time (it convects %.1f%% of time)'
                    %(100.*both1,100.*pct_cnvct    ),verticalalignment='bottom', horizontalalignment='left',transform=plt.gca().transAxes)
-    plt.gca().text(.1,.4,'Classifier correctly predicts no convection : %.1f%% of time (it does not convect  %.1f%% of time)' 
+    plt.gca().text(.1,.4,'Classifier correctly predicts no convection : %.1f%% of time (it does not convect  %.1f%% of time)'
                    %(100.*both0,100.*pct_not_cnvct),verticalalignment='bottom', horizontalalignment='left',transform=plt.gca().transAxes)
     plt.show()
-    fig.savefig(fig_dir + 'convection_classifier_%s.png' %(tistr),bbox_inches='tight',dpi=450)
-    
-def plot_roc_curve(mlp_list,mlp_str,X,y_true):
+    fig.savefig(fig_dir + 'convection_classifier_%s.png' %(tistr),
+                bbox_inches='tight', dpi=450)
+
+def plot_roc_curve(mlp_list, mlp_str, X, y_true):
     # For classifier
     auroc_score = []
     fig = plt.figure()
@@ -225,5 +231,3 @@ def _build_classifiers(c_mlp,c_str,n_iter=10000):
     c_mlp.append(build_nn('classify',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'sgd'))
     c_mlp,c_str = map(list, zip(*c_mlp))
     return c_mlp, c_str
-
-
