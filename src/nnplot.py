@@ -5,7 +5,7 @@ matplotlib.rcParams['agg.path.chunksize'] = 10000
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import src.nnload as nnload
-import scipy.stats 
+import scipy.stats
 from sklearn import metrics, preprocessing
 import pickle
 import os
@@ -14,12 +14,14 @@ unpack = nnload.unpack
 # ---   META PLOTTING SCRIPTS  --- #
 #def plots_by_lat(pp_x, pp_y, r_mlp, lat):
 
-def plot_all_figs(r_str, datasource='./data/convection_50day_validation.pkl', validation=True):
+def plot_all_figs(r_str, datasource='./data/convection_50day_validation.pkl',
+                  validation=True, noshallow=False, rainonly=False):
     # Open the neural network and the preprocessing scheme
     r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
            pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
     # Open the validation data set
-    x_unscl, ytrue_unscl,_,_,_,_,_,_ = nnload.loaddata(datasource, minlev=min(lev))
+    x_unscl, ytrue_unscl,_,_,_,_,_,_ = nnload.loaddata(datasource, minlev=min(lev),
+                                       noshallow=noshallow, rainonly=rainonly)
     # Set figure path and create directory if it does not exist
     figpath = './figs/' + r_str + '/'
     # If plotting on training data create a new subfolder
@@ -37,9 +39,11 @@ def plot_all_figs(r_str, datasource='./data/convection_50day_validation.pkl', va
     # Plot model errors over iteration history
     plot_model_error_over_time(errors, r_str, figpath)
     # Plot historgram showing how scaling changed character of input and output data
-    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat, lev, figpath)
+    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat, lev,
+                               figpath)
     # Plot histogram showing how well true and predicted values match
-    check_output_distribution(ytrue_unscl, ytrue_scl, ypred_unscl, ypred_scl, lat, lev, figpath)
+    check_output_distribution(ytrue_unscl, ytrue_scl, ypred_unscl, ypred_scl,
+                              lat, lev, figpath)
     # Plot means and standard deviations
     plot_means_stds(ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot correlation coefficient, explained variance, and rmse
@@ -56,7 +60,9 @@ def plot_all_figs(r_str, datasource='./data/convection_50day_validation.pkl', va
     make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
 
 def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev):
-    Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
+    # Load data at each level
+    Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = \
+          nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
     # Make figs
     # True means
     f,ax1,ax2 = plot_contour(Tmean,qmean,lat,lev, avg_hem=False)
@@ -215,7 +221,7 @@ def plot_enthalpy(y3_true, y3_pred, dlev, figpath):
     fig.savefig(figpath + 'regress_enthalpy.png',bbox_inches='tight',dpi=450)
     plt.close()
 
-# ----  PLOTTING SCRIPTS  ---- # 
+# ----  PLOTTING SCRIPTS  ---- #
 out_str_dict = {'T':'K/day','q':'g/kg/day'}
 
 def do_mean_or_std(method,vari,in1,in3,lev,ind):
@@ -229,7 +235,7 @@ def do_mean_or_std(method,vari,in1,in3,lev,ind):
     plt.xlabel(out_str_dict[vari])
     plt.title(vari + " " + method)
     plt.legend()
-        
+
 def plot_pearsonr(y_true,y_pred,vari,lev,label=None):
     r = np.empty(y_true.shape[1])
     prob = np.empty(y_true.shape[1])
@@ -239,7 +245,7 @@ def plot_pearsonr(y_true,y_pred,vari,lev,label=None):
     plt.ylim([np.amax(lev),np.amin(lev)])
     plt.ylabel('$\sigma$')
     plt.title('Correlation Coefficient')
-    
+
 def plot_rmse(y_true,y_pred,vari,lev, label=None):
     rmse = np.sqrt(metrics.mean_squared_error(y_true,y_pred,multioutput='raw_values'))
     rmse = rmse / np.mean(y_true, axis=0)
@@ -248,7 +254,7 @@ def plot_rmse(y_true,y_pred,vari,lev, label=None):
     plt.ylabel('$\sigma$')
     plt.xlabel(out_str_dict[vari])
     plt.title('Root Mean Squared Error/mean')
-    
+
 def plot_expl_var(y_true,y_pred,vari,lev, label=None):
     expl_var = metrics.explained_variance_score(y_true,y_pred,multioutput='raw_values')
     plt.plot(unpack(expl_var,vari,axis=0) ,lev, label=label)
@@ -256,13 +262,13 @@ def plot_expl_var(y_true,y_pred,vari,lev, label=None):
     plt.ylabel('$\sigma$')
     #plt.xlabel('(' + out_str_dict[vari] + ')$^2$')
     plt.title('Explained Variance Regression Score')
-    
+
 def _plot_enthalpy(y, dlev, label=None):
     k = calc_enthalpy(y, dlev)
     n, bins, patches = plt.hist(k, 50, alpha=0.5,label=label) #, facecolor='green'
     plt.title('Heating rate needed to conserve column enthalpy')
     plt.xlabel('K/day over column')
-    
+
 def _plot_precip(y_true,y_pred, dlev):
     y_true = calc_precip(y_true, dlev)
     y_pred = calc_precip(y_pred, dlev)
@@ -311,12 +317,12 @@ def check_output_distribution(yt_unscl, yt_scl, yp_unscl, yp_scl, lat, lev, figp
 
 def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr,xl=None,xu=None, bins=None):
     """Plots a stack of histograms of log10(data) at all levels"""
-    # Initialize the bins and the frequency 
+    # Initialize the bins and the frequency
     num_bins = 100
     if bins is None:
         bins = np.linspace(np.amin(z), np.amax(z), num_bins+1)
     n = np.zeros((num_bins, lev.size))
-    # Calculate distribution at each level 
+    # Calculate distribution at each level
     for i in range(lev.size):
         n[:,i], _ = np.histogram(z[:,i], bins=bins)
     bins1=bins[:-1]
@@ -377,7 +383,7 @@ def plot_regressors_scores(r_list,r_str,x_test,y_true, fig_dir, txt):
     plt.yticks(tick, r_str)
     plt.semilogx(mse, tick, marker='o',)
     plt.title('Mean Squared Error')
-    # Plot R2 
+    # Plot R2
     plt.subplot(1,2,2)
     plt.plot(r2_u, tick, marker='o', label='uniform')
     plt.plot(r2_w, tick, marker='o', label='weighted')
@@ -387,15 +393,17 @@ def plot_regressors_scores(r_list,r_str,x_test,y_true, fig_dir, txt):
     plt.xlim((-1,1))
     fig.savefig(fig_dir + txt + '_scores.png',bbox_inches='tight',dpi=450)
     plt.close()
- 
-def plot_sample_profiles(num_prof, x, ytrue, ypred, lev, figpath):
+
+def plot_sample_profiles(num_prof, x, ytrue, ypred, lev, figpath, samp=None):
     # Make directory if one does not exist
     if not os.path.exists(figpath + '/samples/'):
         os.makedirs(figpath + '/samples/')
     for i in range(num_prof):
-        samp = np.random.randint(0, x.shape[0])
-        plot_sample_profile(x[samp,:], ytrue[samp,:], ypred[samp,:], 
-                             lev, filename=figpath+'/samples/'+str(samp)+'.png')
+        if samp is None:
+            samp = np.random.randint(0, x.shape[0])
+        plot_sample_profile_v2(x[samp,:], ytrue[samp,:], ypred[samp,:],
+                             lev, filename=figpath+'/samples/'+str(samp)+'_v2.png')
+        samp=None
 
 def plot_sample_profile(x, y_true, y_pred, lev, filename=None):
     """Plots the vertical profiles of input T & q and predicted and true output tendencies"""
@@ -436,8 +444,108 @@ def plot_sample_profile(x, y_true, y_pred, lev, filename=None):
     if filename is not None:
         f.savefig(filename, bbox_inches='tight', dpi=450)
     plt.close()
-# ----  HELPER SCRIPTS  ---- # 
-    
+
+def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
+        """Plots the vertical profiles of input T & q and predicted and true output tendencies"""
+        f = plt.figure()
+        gs = gridspec.GridSpec(1, 2)
+        ax1 = plt.subplot(gs[0, 0])
+        # ax2 = plt.subplot(gs[0, 1])
+        ax3 = plt.subplot(gs[0, 1])
+        #f, (ax1, ax2, ax3) = plt.subplots(1, 3)
+        T = nnload.unpack(x, 'T', axis=0)
+        q = nnload.unpack(x, 'q', axis=0)
+        theta = calc_theta(T, lev)
+        theta_e = calc_theta_e(T, theta, q)
+        theta_e_ns = theta_e[-2]*np.ones(lev.shape)
+        # Plot input temperature profile
+        ax1.plot(theta, lev, label=r'$\theta$')
+        ax1.plot(theta_e, lev, label=r'$\theta_e$')
+        ax1.plot(theta_e_ns, lev)
+        ax1.set_ylim(1, 0.25)
+        ax1.set_xlim(270, 370)
+        ax1.set_title(r'Input Profiles')
+        ax1.set_xlabel(r'$\theta$ [K]')
+        ax1.grid(True)
+        ax1.legend(loc='upper left')
+        # Plot input humidity profile
+        # ax2.plot(q, lev)
+        # ax2.set_ylim(1, 0.25)
+        # ax2.set_xlim(0, .02)
+        # ax2.set_title('Input Humidity')
+        # ax2.set_xlabel('q [g/kg]')
+        # ax2.grid(True)
+        # Plot output profiles
+        L = 2.5
+        Cp =1.005
+        ax3.plot(Cp * nnload.unpack(y_true, 'T', axis=0), lev, color='red' , ls='-' , label='dT true')
+        ax3.plot(Cp * nnload.unpack(y_pred, 'T', axis=0), lev, color='red' , ls='--', label='dT pred')
+        ax3.plot(L * nnload.unpack(y_true, 'q', axis=0), lev, color='blue', ls='-' , label='dq true')
+        ax3.plot(L * nnload.unpack(y_pred, 'q', axis=0), lev, color='blue', ls='--', label='dq pred')
+        ax3.set_ylim(1, 0.25)
+        ax3.set_xlabel('Cp*T or L*q [kJ/day]')
+        ax3.set_title('Output Temp and Humidity')
+        ax3.legend()
+        ax3.grid(True)
+        # Save file if requested
+        if filename is not None:
+            f.savefig(filename, bbox_inches='tight', dpi=450)
+        plt.close()
+
+# ----  META-PLOTTING SCRIPTS  ---- #
+def meta_compare_error_rate():
+    hid_neur = [5,10,15,20,30,40,50,60,80,100,150]#,225,300] #,450,600]
+    e = dict()
+    e['train_L1_R0']=[]
+    e['test_L1_R0']=[]
+    e['train_L2_R0']=[]
+    e['test_L2_R0']=[]
+    e['train_L1_R1e-5']=[]
+    e['test_L1_R1e-5']=[]
+    e['train_L2_R1e-5']=[]
+    e['test_L2_R1e-5']=[]
+    ptf = './data/regressors/X-StandardScaler-qTindi_Y-SimpleY-qTindi_r_'
+    for h in hid_neur:
+        hs = str(h)
+        _,_,e_load,_,_,_,_,_,_,_ = pickle.load(open(ptf + hs + 'R_mom0.9.pkl', 'rb'))
+        e['train_L1_R0'].append(np.amin(e_load[-1,1]))
+        e['test_L1_R0'].append(np.amin(e_load[-1,3]))
+        _,_,e_load,_,_,_,_,_,_,_ = pickle.load(open(ptf + hs + 'R_' + hs + 'R_mom0.9.pkl', 'rb'))
+        e['train_L2_R0'].append(np.amin(e_load[-1,1]))
+        e['test_L2_R0'].append(np.amin(e_load[-1,3]))
+        _,_,e_load,_,_,_,_,_,_,_ = pickle.load(open(ptf + hs + 'R_mom0.9reg1e-05.pkl', 'rb'))
+        e['train_L1_R1e-5'].append(np.amin(e_load[-1,1]))
+        e['test_L1_R1e-5'].append(np.amin(e_load[-1,3]))
+        _,_,e_load,_,_,_,_,_,_,_ = pickle.load(open(ptf + hs + 'R_' + hs + 'R_mom0.9reg1e-05.pkl', 'rb'))
+        e['train_L2_R1e-5'].append(np.amin(e_load[-1,1]))
+        e['test_L2_R1e-5'].append(np.amin(e_load[-1,3]))
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    ax1.plot(hid_neur, e['train_L1_R0'], color='b', ls='-', marker='o',
+             label='Train 1-layer')
+    ax1.plot(hid_neur, e['test_L1_R0'], color='r', ls='-', marker='o',
+             label='Test 1-layer')
+    ax1.plot(hid_neur, e['train_L2_R0'], color='b', ls='--', marker='s',
+             label='Train 2-layer')
+    ax1.plot(hid_neur, e['test_L2_R0'], color='r', ls='--', marker='s',
+             label='Test 2-layer')
+    #ax1.legend(loc='lower left')
+    ax1.set_title('Error rate (no regularization)')
+    ax2.plot(hid_neur, e['train_L1_R1e-5'], color='b', ls='-', marker='o',
+             label='Train 1-layer')
+    ax2.plot(hid_neur, e['test_L1_R1e-5'], color='r', ls='-', marker='o',
+             label='Test 1-layer')
+    ax2.plot(hid_neur, e['train_L2_R1e-5'], color='b', ls='--', marker='s',
+             label='Train 2-layer')
+    ax2.plot(hid_neur, e['test_L2_R1e-5'], color='r', ls='-', marker='s',
+             label='Test 2-layer')
+    ax2.legend(loc='upper right')
+    ax2.set_title('Error Rate (with regularization)')
+    plt.show()
+    fig.savefig('./figs/Compare_error_rate_vs_hid_neur.png',bbox_inches='tight',
+                dpi=450)
+
+# ----  HELPER SCRIPTS  ---- #
+
 def calc_enthalpy(y, dlev):
     # y is output data set in rate (1/day)
     # k is the implied uniform heating rate over the whole column to correct the imbalance
@@ -452,7 +560,7 @@ def vertical_integral(data, dlev):
     g = 9.8 #m/s2
     data = -1./g * np.sum(data * dlev[:,None].T, axis=1)*1e5
     return data
-  
+
 def calc_precip(y, dlev):
     y = unpack(y,'q')
     y = y / 1000. # kg/kg/day
@@ -462,3 +570,9 @@ def calc_theta(T, sigma):
     kappa = 287./1005.
     theta = T * np.power(1. / sigma, kappa)
     return theta
+
+def calc_theta_e(T, theta, q):
+    L = 2.5e6
+    Cp = 1005
+    theta_e = theta * np.exp(L * q / Cp / T)
+    return theta_e
