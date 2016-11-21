@@ -3,9 +3,10 @@ from netCDF4 import Dataset
 from sklearn import preprocessing, metrics
 import scipy.stats
 import pickle
+import warnings
 
-def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False,
-             noshallow=False, verbose=True):
+def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_examples=None,
+             rainonly=False, noshallow=False, verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
        the input filename is generated.
 
@@ -67,12 +68,12 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False,
                 # Pout = Pout[indlat,:]
             else:
                 raise TypeError('Need to set an index value for indlat')
-    # print(Pout.shape)
-    # print(v['Tin'].shape)
-    # Pout = np.reshape(Pout,-1)
-    # print(Pout.shape)
-    # print('hey')
-    timestep = 10*60 # 10 minute timestep
+    # Randomize the order of these events
+    m = v['Tin'].shape[0]
+    randind = np.random.permutation(m)
+    for var in varis:
+        v[var] = v[var][randind,:]
+    timestep = 10*60 # 10 minute timestep in seconds
     # Converted heating rates to K/day and g/kg/day in prep_convection_output.py
     # Concatenate input and output variables together
     x = pack(v['Tin'],  v['qin'] , axis=1)
@@ -83,6 +84,16 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, rainonly=False,
     # Print some statistics about rain and limit to when it's raining if True
     x, y, Pout2 = limitrain(x, y, Pout2, rainonly, noshallow=noshallow,
                            verbose=verbose)
+    # Limit to only certain events if requested
+    if N_trn_examples is not None:
+        if N_trn_examples > y.shape[0]:
+            warnings.warn('Requested more samples than available. Using the' +
+                           'maximum number available')
+            N_trn_examples = y.shape[0]
+        ind = np.arange(N_trn_examples)
+        x = x[ind,:]
+        y = y[ind,:]
+        Pout2 = Pout2[:]
     # Store when convection occurs
     cv,_ = whenconvection(y, verbose=verbose)
     return (x, y, cv, Pout2, lat2, lev, dlev, timestep)

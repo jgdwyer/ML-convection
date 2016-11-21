@@ -8,7 +8,7 @@ y_ppi={'name':'SimpleY','method':'qTindividually'}
 #y_ppi={'name':'MaxAbs','method':'qTindividually'}
 
 #hid_neur = [10,20,40,60,100,150,225,300,450,600,800,1000]
-hid_neur = [5,15,30,50,80]
+# hid_neur = [5,15,30,50,80]
 # nntrain.train_nn_wrapper(2, 61, x_ppi, y_ppi, n_iter=10000, minlev=0.25, noshallow=True)
 nntrain.train_nn_wrapper(2, 62, x_ppi, y_ppi, n_iter=10000, minlev=0.25, rainonly=True)
 #      use_weights=False, weight_decay=0.0)
