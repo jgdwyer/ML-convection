@@ -9,11 +9,12 @@ import src.nnplot as nnplot
 # ---  BUILDING NEURAL NETS  --- #
 def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=None,
                      minlev=0.0,rainonly=False,data_dir='./data/',
-                     use_weights=False, weight_decay = 0.0, noshallow=False):
+                     use_weights=False, weight_decay = 0.0, noshallow=False,
+                     N_trn_exs=None):
     # Load training data
     x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + \
                             'convection_50day.pkl', minlev, rainonly=rainonly,
-                            noshallow=noshallow)
+                            noshallow=noshallow, N_trn_exs=N_trn_exs)
     # Set up weights for training examples
     if use_weights:
         #_,convection_strength = nnload.whenconvection(y)
@@ -29,6 +30,8 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=No
     # Make preprocessor string for saving
     pp_str =          'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
     pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
+    # Add number of training examples to string
+    pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
     # Subsample data
     x1 = x
     y1 = y
@@ -70,7 +73,7 @@ def store_stats(i, avg_train_error, best_train_error, avg_valid_error, best_vali
 def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
              batch_size=100, n_iter=None, n_stable=None,
              learning_rate=0.01, learning_momentum=0.9,
-             regularize='L2', weight_decay=0.0, valid_size=0.25,
+             regularize='L2', weight_decay=0.0, valid_size=0.5,
              f_stable=.001):
     """Builds a multi-layer perceptron via the scikit neural network interface"""
     # First build layers
@@ -92,12 +95,19 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
                                  regularize = regularize, weight_decay = weight_decay, n_stable=n_stable,
                                  valid_size=valid_size, callback={'on_epoch_finish': store_stats})
     #Write nn string
-    layerstr='_'.join([str(h)+f[0] for h,f in zip(hid_neur,actv_fnc)])
+    layerstr = '_'.join([str(h) + f[0] for h, f in zip(hid_neur, actv_fnc)])
+    if learning_rule == 'momentum':
+        lrn_str = str(learning_momentum)
+    else:
+        lrn_str = str(learning_rate)
+    # Construct name
     mlp_str = pp_str + method[0] + "_" +  layerstr + "_" + learning_rule[0:3] + \
-              "{}".format(str(learning_momentum) if learning_rule=='momentum'
-                                                 else str(learning_rate))
+              lrn_str
+    # If using regularization, add that to the name too
     if weight_decay > 0.0:
         mlp_str = mlp_str + 'reg' + str(weight_decay)
+    # Add the number of iterations too
+    mlp_str = mlp_str + '_Niter' + str(n_iter)
     return mlp,mlp_str
 
 
