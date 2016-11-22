@@ -195,12 +195,14 @@ def plot_scatter(ytrue_unscl, ypred_unscl, lev, dlev, figpath):
 
 def _plot_scatter(ax, true, pred, titstr=None):
     ax.scatter(true, pred, s=5, alpha=0.25)
+    # Calcualte mins and maxs and set axis bounds appropriately
     xmin = np.min(true)
     xmax = np.max(true)
     ymin = np.min(pred)
     ymax = np.max(pred)
     xymin = np.min([xmin,ymin])
     xymax = np.max([xmax,ymax])
+    # Plot 1-1 line
     ax.plot([xymin,xymax], [xymin, xymax], color='k', ls='--')
     ax.set_xlim(xymin, xymax)
     ax.set_ylim(xymin, xymax)
@@ -224,25 +226,25 @@ def plot_enthalpy(y3_true, y3_pred, dlev, figpath):
 # ----  PLOTTING SCRIPTS  ---- #
 out_str_dict = {'T':'K/day','q':'g/kg/day'}
 
-def do_mean_or_std(method,vari,in1,in3,lev,ind):
+def do_mean_or_std(method, vari, true, pred, lev, ind):
     methods = {'mean':np.mean,'std':np.std}
     plt.subplot(2,2,ind)
     m = lambda x: methods[method](unpack(x,vari), axis=0).T
-    plt.plot(m(in1), lev, label='true')
-    plt.plot(m(in3), lev, label='pred')
+    plt.plot(m(true), lev, label='true')
+    plt.plot(m(pred), lev, label='pred')
     plt.ylim(np.amax(lev),np.amin(lev))
     plt.ylabel('$\sigma$')
     plt.xlabel(out_str_dict[vari])
     plt.title(vari + " " + method)
     plt.legend()
 
-def plot_pearsonr(y_true,y_pred,vari,lev,label=None):
+def plot_pearsonr(y_true, y_pred, vari, lev, label=None):
     r = np.empty(y_true.shape[1])
     prob = np.empty(y_true.shape[1])
     for i in range(y_true.shape[1]):
         r[i], prob[i] = scipy.stats.pearsonr(y_true[:,i],y_pred[:,i])
-    plt.plot(unpack(r,vari,axis=0), lev, label=label)
-    plt.ylim([np.amax(lev),np.amin(lev)])
+    plt.plot(unpack(r,vari, axis=0), lev, label=label)
+    plt.ylim([np.amax(lev), np.amin(lev)])
     plt.ylabel('$\sigma$')
     plt.title('Correlation Coefficient')
 
@@ -269,7 +271,7 @@ def _plot_enthalpy(y, dlev, label=None):
     plt.title('Heating rate needed to conserve column enthalpy')
     plt.xlabel('K/day over column')
 
-def _plot_precip(y_true,y_pred, dlev):
+def _plot_precip(y_true, y_pred, dlev):
     y_true = calc_precip(y_true, dlev)
     y_pred = calc_precip(y_pred, dlev)
     ind = y_true.argsort()
@@ -315,7 +317,8 @@ def check_output_distribution(yt_unscl, yt_scl, yp_unscl, yp_scl, lat, lev, figp
     fig.savefig(figpath + 'output_compare_true_pred_scaled.png',bbox_inches='tight',dpi=450)
     plt.close()
 
-def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr,xl=None,xu=None, bins=None):
+def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr, xl=None,
+                       xu=None, bins=None):
     """Plots a stack of histograms of log10(data) at all levels"""
     # Initialize the bins and the frequency
     num_bins = 100
@@ -468,20 +471,12 @@ def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
         ax1.set_xlabel(r'$\theta$ [K]')
         ax1.grid(True)
         ax1.legend(loc='upper left')
-        # Plot input humidity profile
-        # ax2.plot(q, lev)
-        # ax2.set_ylim(1, 0.25)
-        # ax2.set_xlim(0, .02)
-        # ax2.set_title('Input Humidity')
-        # ax2.set_xlabel('q [g/kg]')
-        # ax2.grid(True)
-        # Plot output profiles
         L = 2.5
         Cp =1.005
-        ax3.plot(Cp * nnload.unpack(y_true, 'T', axis=0), lev, color='red' , ls='-' , label='dT true')
-        ax3.plot(Cp * nnload.unpack(y_pred, 'T', axis=0), lev, color='red' , ls='--', label='dT pred')
-        ax3.plot(L * nnload.unpack(y_true, 'q', axis=0), lev, color='blue', ls='-' , label='dq true')
-        ax3.plot(L * nnload.unpack(y_pred, 'q', axis=0), lev, color='blue', ls='--', label='dq pred')
+        ax3.plot(Cp * nnload.unpack(y_true, 'T', axis=0), lev, color='red' , ls='-' , label=r'$\Delta$T true')
+        ax3.plot(Cp * nnload.unpack(y_pred, 'T', axis=0), lev, color='red' , ls='--', label=r'$\Delta$T pred')
+        ax3.plot(L * nnload.unpack(y_true, 'q', axis=0), lev, color='blue', ls='-' , label=r'$\Delta$q true')
+        ax3.plot(L * nnload.unpack(y_pred, 'q', axis=0), lev, color='blue', ls='--', label=r'$\Delta$q pred')
         ax3.set_ylim(1, 0.25)
         ax3.set_xlabel('Cp*T or L*q [kJ/day]')
         ax3.set_title('Output Temp and Humidity')
