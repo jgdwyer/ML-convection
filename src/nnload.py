@@ -5,46 +5,48 @@ import scipy.stats
 import pickle
 import warnings
 
-def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_examples=None,
+def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
              rainonly=False, noshallow=False, verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
        the input filename is generated.
 
     Args:
-        filename:  The file to be loaded. Use convection_50day.pkl  or
-                   convection_50day_validation.pkl
-        minlev:    The topmost model level for which to load data. Set to 0. to
-                   load all data
-        all_lats:  Logical value for whether to load data from all latitudes
-        indlat:    If all_lats is false, give the index value [0-31] for the
-                   latitude at which to load data.
-        rainonly:  If true, only return training examples of when it is raining
-        noshallow: If true, only return training examples of when the shallow
-                   convection scheme does NOT happen. (So, only return examples
-                   with deep convection, or no convection at all)
-        verbose:   If true, prints some basic stats about training set
+      filename:  The file to be loaded. Use convection_50day.pkl  or
+                 convection_50day_validation.pkl
+      minlev:    The topmost model level for which to load data. Set to 0. to
+                 load all data
+      all_lats:  Logical value for whether to load data from all latitudes
+      indlat:    If all_lats is false, give the index value [0-31] for the
+                 latitude at which to load data.
+      N_trn_exs: Number of training examples to load. If set to None, or
+                 if requested number exceeds max available will load all.
+      rainonly:  If true, only return training examples of when it is raining
+      noshallow: If true, only return training examples of when the shallow
+                 convection scheme does NOT happen. (So, only return examples
+                 with deep convection, or no convection at all)
+      verbose:   If true, prints some basic stats about training set
 
     Returns:
-        x       : 2-d numpy array of input features (m_training examples x
-                  N_input features). If minlev is 0., there will be 60 input
-                  features, the top 30 for temperature and the bottom 30 for
-                  humidity.
-        y       : 2-d numpy array of output targets (m_traning examples x
-                  N_output targets). If minlev is 0., there will be 60 output
-                  features, the top 30 for temp. tendencies and the bottom 30
-                  for q tend.
-        cv      : 1-d array (m_training examples x 1) that gives 1 if convection
-                  occurs and 0 if it does not.
-        Pout    : 1-d arrray (m_training examples x 1) of how much precipitation
-                  occurs in kg/m^2/s (multiply by 3600*24 to convert
-                  precipitation to mm/day)
-        lat2    : 1-d array of latitude for one hemisphere (since hemispheres
-                  are combined)
-        lev     : The vertical model levels (1 is the surface and 0 is the top
-                  of the atmosphere).
-        dlev    : The difference between model levels, useful for calculating
-                  some derived quantities.
-        timestep: How large each model timestep is in seconds.
+      x       : 2-d numpy array of input features (m_training examples x
+                N_input features). If minlev is 0., there will be 60 input
+                features, the top 30 for temperature and the bottom 30 for
+                humidity.
+      y       : 2-d numpy array of output targets (m_traning examples x
+                N_output targets). If minlev is 0., there will be 60 output
+                features, the top 30 for temp. tendencies and the bottom 30
+                for q tend.
+      cv      : 1-d array (m_training examples x 1) that gives 1 if convection
+                occurs and 0 if it does not.
+      Pout    : 1-d arrray (m_training examples x 1) of how much precipitation
+                occurs in kg/m^2/s (multiply by 3600*24 to convert
+                precipitation to mm/day)
+      lat2    : 1-d array of latitude for one hemisphere (since hemispheres
+                are combined)
+      lev     : The vertical model levels (1 is the surface and 0 is the top
+                of the atmosphere).
+      dlev    : The difference between model levels, useful for calculating
+                some derived quantities.
+      timestep: How large each model timestep is in seconds.
     """
     # Data to read in is N_lev x N_lat (SH & NH) x N_samples
     # Samples are quasi indpendent with only 10 from each latitude range chosen
@@ -85,12 +87,12 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_examples=None,
     x, y, Pout2 = limitrain(x, y, Pout2, rainonly, noshallow=noshallow,
                            verbose=verbose)
     # Limit to only certain events if requested
-    if N_trn_examples is not None:
-        if N_trn_examples > y.shape[0]:
+    if N_trn_exs is not None:
+        if N_trn_exs > y.shape[0]:
             warnings.warn('Requested more samples than available. Using the' +
                            'maximum number available')
-            N_trn_examples = y.shape[0]
-        ind = np.arange(N_trn_examples)
+            N_trn_exs = y.shape[0]
+        ind = np.arange(N_trn_exs)
         x = x[ind,:]
         y = y[ind,:]
         Pout2 = Pout2[:]
@@ -108,26 +110,6 @@ def reshape_one_lat(z, indlev, indlat):
     z = z[indlev,indlat,:]
     z = z.swapaxes(0,1)
     return np.reshape(z, (-1, sum(indlev)))
-
-def _prep_old(M,indlev,indlat):
-    if M.ndim == 4:
-        M = M[:,indlev,indlat,:].squeeze()
-        M = M.swapaxes(1,2) # N_time x N_lon x N_lev
-        # Need to do sum of indlev because it is a logical vector
-        M = np.reshape(M, (-1, sum(indlev))) #Now N_time*N_lon x N_lev
-    elif M.ndim == 3:
-        M = M[:,indlat,:]
-        M = np.reshape(M,-1)
-    return M
-
-def _prep_all_lats_old(M,indlev):
-    if M.ndim == 4: #Ntime x Nlev x Nlat x Nlon
-        M = M[:,indlev,:,:]
-        M = M.swapaxes(1,3)
-        M = np.reshape(M, (-1, M.shape[3])) #Ntime x Nlat x Nlon
-    elif M.ndim ==3:
-        M = np.reshape(M, (-1))[:,None]
-    return M
 
 def pack(d1,d2,axis=1):
     """Combines T & q profiles as an input matrix to NN"""
@@ -248,7 +230,7 @@ def limitrain(x,y,Pout, rainonly=False, noshallow=False, verbose=True):
         print('There is some amount of rain %.1f%% of the time'
           %(100.*np.sum(indrain)/len(indrain)))
         print('There is a rate of >3 mm/day %.1f%% of the time'
-          %(100.*np.sum(np.greater(Pout*3600.*24.,3))/len(indrain)))
+          %(100.*np.sum(np.greater(Pout,3))/len(indrain)))
     if rainonly:
         x = x[indrain,:]
         y = y[indrain,:]
