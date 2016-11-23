@@ -1,52 +1,42 @@
 import src.nntrain as nntrain
 import src.nnplot as nnplot
-
-r_str=[None]*16
+import src.nnload as nnload
 
 # Define preprocessor
-x_ppi={'name':'MinMax','method':'individually'}
-y_ppi={'name':'MaxAbs','method':'alltogether'}
+x_ppi={'name':'StandardScaler','method':'qTindividually'}
+y_ppi={'name':'SimpleY','method':'qTindividually'}
+#y_ppi={'name':'MaxAbs','method':'qTindividually'}
 
-xp1 = {'name':'StandardScaler','method':'individually'}
-xp2 = {'name':'StandardScaler','method':'alltogether'}
-xp3 = {'name':'MinMax','method':'individually'}
-xp4 = {'name':'MinMax','method':'alltogether'}
+n_samps = [100,200,500,1000,2000,3500,5000,7500,10000,12500,15000]
 
-yp1 = {'name':'StandardScaler','method':'individually'}
-yp2 = {'name':'StandardScaler','method':'alltogether'}
-yp3 = {'name':'MaxAbs','method':'individually'}
-yp4 = {'name':'MaxAbs','method':'alltogether'}
+#hid_neur = [10,20,40,60,100,150,225,300,450,600,800,1000]
+# hid_neur = [5,15,30,50,80]
+# nntrain.train_nn_wrapper(2, 61, x_ppi, y_ppi, n_iter=10000, minlev=0.25, noshallow=True)
+for n_samp in n_samps:
+    nntrain.train_nn_wrapper(2, 60, x_ppi, y_ppi, minlev=0.25, n_iter=10000,
+                            rainonly=False,  use_weights=False, weight_decay=0.0,
+                            N_trn_exs=n_samp)
+# for h in hid_neur:
+#     r_str = nntrain.train_nn_wrapper(1, h, x_ppi, y_ppi, n_iter=10000, minlev=0.25,
+#      use_weights=False, weight_decay=0.0)
+#     r_str = nntrain.train_nn_wrapper(1, h, x_ppi, y_ppi, n_iter=10000, minlev=0.25,
+#      use_weights=False, weight_decay=0.00001)
+#     r_str = nntrain.train_nn_wrapper(2, h, x_ppi, y_ppi, n_iter=10000, minlev=0.25,
+#      use_weights=False, weight_decay=0.0)
+#     r_str = nntrain.train_nn_wrapper(2, h, x_ppi, y_ppi, n_iter=10000, minlev=0.25,
+#      use_weights=False, weight_decay=0.00001)
+#r_str[0] = nntrain.train_nn_wrapper(4, 200, x_ppi, y_ppi, n_iter=5000, minlev=0.25, use_weights=True, weight_decay=0.00001)
+#r_str[0] = nntrain.train_nn_wrapper(4, 1000, x_ppi, y_ppi, n_iter=4000, minlev=0.25, use_weights=True, weight_decay=0.0)
+#r_str[1] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=0.00001)
+#r_str[2] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=0.0001)
+#r_str[3] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=0.001)
+#r_str[4] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=0.01)
+#r_str[5] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=0.1)
+#r_str[6] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=1.0)
+#r_str[7] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=10.0)
+#r_str[8] = nntrain.train_nn_wrapper(50, x_ppi, y_ppi, n_iter=1000, minlev=0.25, use_weights=True, weight_decay=100.0)
+#r_str[1], x, y = nntrain.train_nn_wrapper(800, x_ppi, y_ppi, n_stable=100, minlev=0.25)
+#r_str[2], x, y = nntrain.train_nn_wrapper(1200, x_ppi, y_ppi, n_stable=100)
+#r_str[3], x, y = nntrain.train_nn_wrapper(1600, x_ppi, y_ppi, n_stable=100)
 
-r_str[0], x, y = nntrain.train_nn_wrapper(400, xp1, yp1, n_stable=75)
-r_str[1], x, y = nntrain.train_nn_wrapper(400, xp1, yp2, n_stable=75)
-r_str[2], x, y = nntrain.train_nn_wrapper(400, xp2, yp1, n_stable=75)
-r_str[3], x, y = nntrain.train_nn_wrapper(400, xp2, yp2, n_stable=75)
-
-r_str[4], x, y = nntrain.train_nn_wrapper(400, xp1, yp3, n_stable=75)
-r_str[5], x, y = nntrain.train_nn_wrapper(400, xp1, yp4, n_stable=75)
-r_str[6], x, y = nntrain.train_nn_wrapper(400, xp2, yp3, n_stable=75)
-r_str[7], x, y = nntrain.train_nn_wrapper(400, xp2, yp4, n_stable=75)
-
-r_str[8], x, y = nntrain.train_nn_wrapper(400, xp3, yp1, n_stable=75)
-r_str[9], x, y = nntrain.train_nn_wrapper(400, xp3, yp2, n_stable=75)
-r_str[10], x, y = nntrain.train_nn_wrapper(400, xp4, yp1, n_stable=75)
-r_str[11], x, y = nntrain.train_nn_wrapper(400, xp4, yp2, n_stable=75)
-
-r_str[12], x, y = nntrain.train_nn_wrapper(400, xp3, yp3, n_stable=75)
-r_str[13], x, y = nntrain.train_nn_wrapper(400, xp3, yp4, n_stable=75)
-r_str[14], x, y = nntrain.train_nn_wrapper(400, xp4, yp3, n_stable=75)
-r_str[15], x, y = nntrain.train_nn_wrapper(400, xp4, yp4, n_stable=75)
-
-for r in r_str:
-    nnplot.plot_all_figs(r, x, y)
-#nntrain.train_nn_wrapper(300,n_stable=50)
-#nntrain.train_nn_wrapper(600,n_stable=50)
-
-#     r_mlp.append(build_nn('regress',['Rectifier','Rectifier']            ,[500,500]    ,n_iter,batch_size,'momentum'))
-#     r_mlp.append(build_nn('regress',['Rectifier','Rectifier','Rectifier'],[200,200,200],n_iter,batch_size,'momentum'))
-#     r_mlp.append(build_nn('regress',['Tanh','Tanh','Tanh']               ,[100,100,100],n_iter,batch_size,'momentum'))
-#     r_mlp.append(build_nn('regress',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'momentum'))
-#     r_mlp.append(build_nn('regress',['Tanh','Tanh']                      ,[200,200]    ,n_iter,batch_size,'momentum'))
-#     r_mlp.append(build_nn('regress',['Tanh']                             ,[500]        ,n_iter,batch_size,'momentum'))
-#     r_mlp.append(build_nn('regress',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'momentum',learning_momentum=0.7))
-#     r_mlp.append(build_nn('regress',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'sgd'))
+#nnplot.plot_all_figs('X-StandardScaler-indivi_Y-MaxAbs-qTindi_r_50R_mom0.5reg0.001_w2')
