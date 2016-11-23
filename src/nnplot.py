@@ -345,24 +345,6 @@ def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr, xl=None,
     xl,xr = ax.set_xlim()
     return xl, xr, bins
 
-def plot_model_error_over_time(errors, mlp_str, fig_dir):
-    x = np.arange(errors.shape[0])
-    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
-    # Plot error rate vs. iteration number
-    fig=plt.figure()
-    # Plot training errors
-    plt.semilogy(x, np.squeeze(errors[:,0]), alpha=0.5,color='blue',label='Training')
-    plt.semilogy(x, np.squeeze(errors[:,1]), alpha=0.5,color='blue')
-    plt.yticks(ytix,ytix)
-    plt.ylim((np.nanmin(errors), np.nanmax(errors)))
-    plt.semilogy(x, np.squeeze(errors[:,2]), alpha=0.5,label='Testing',color='green')
-    plt.semilogy(x, np.squeeze(errors[:,3]), alpha=0.5,color='green')
-    plt.legend()
-    plt.title('Error for ' + mlp_str)
-    plt.xlabel('Iteration Number')
-    fig.savefig(fig_dir + 'error_history.png',bbox_inches='tight',dpi=450)
-    plt.close()
-
 def plot_regressors_scores(r_list,r_str,x_test,y_true, fig_dir, txt):
     """Given a list of fitted regressor objects, compare their skill on a variety of tests"""
     mse=[]
@@ -480,12 +462,12 @@ def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
         ax3.set_ylim(1, 0.25)
         ax3.set_xlabel('Cp*T or L*q [kJ/day]')
         ax3.set_title('Output Temp and Humidity')
-        ax3.legend()
+        ax3.legend(loc="upper left")
         ax3.grid(True)
         # Save file if requested
         if filename is not None:
             f.savefig(filename, bbox_inches='tight', dpi=450)
-        plt.close()
+            plt.close()
 
 # ----  META-PLOTTING SCRIPTS  ---- #
 def meta_compare_error_rate():
@@ -537,6 +519,51 @@ def meta_compare_error_rate():
     ax2.set_title('Error Rate (with regularization)')
     plt.show()
     fig.savefig('./figs/Compare_error_rate_vs_hid_neur.png',bbox_inches='tight',
+                dpi=450)
+
+def meta_plot_model_error_over_time(errors, mlp_str, fig_dir):
+    x = np.arange(errors.shape[0])
+    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
+    # Plot error rate vs. iteration number
+    fig = plt.figure()
+    # Plot training errors
+    plt.semilogy(x, np.squeeze(errors[:,0]), alpha=0.5, color='blue',
+                 label='Training')
+    plt.semilogy(x, np.squeeze(errors[:,1]), alpha=0.5, color='blue')
+    plt.yticks(ytix, ytix)
+    plt.ylim((np.nanmin(errors), np.nanmax(errors)))
+    plt.semilogy(x, np.squeeze(errors[:,2]), alpha=0.5, color='green',
+                 label='Testing')
+    plt.semilogy(x, np.squeeze(errors[:,3]), alpha=0.5, color='green')
+    plt.legend()
+    plt.title('Error for ' + mlp_str)
+    plt.xlabel('Iteration Number')
+    fig.savefig(fig_dir + 'error_history.png', bbox_inches='tight', dpi=450)
+    plt.close()
+
+def meta_plot_model_error_vs_training_examples():
+    n_samp = np.array([100,200,500,1000,2000,3500,5000,7500,10000,12500,15000])
+    err_trn = []
+    err_tst = []
+    # Load data for each sample
+    for n in n_samp:
+        r_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex' + str(n) + \
+                '_r_60R_60R_mom0.9_Niter10000'
+        _, _, errors, _, _, _, _, _, _, _ = \
+               pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+        err_trn.append(np.amin(errors[:,0]))
+        err_tst.append(np.amin(errors[:,2]))
+    fig = plt.figure()
+    n_samp = n_samp / 2. # we are doing a 50-50 split for train & cross-validat
+    plt.plot(n_samp, err_trn, label='Train')
+    plt.plot(n_samp, err_tst, label='Test')
+    plt.legend()
+    r_str_save = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi' + \
+                 '_r_60R_60R_mom0.9_Niter10000'
+    plt.title('Error Rate for ' + r_str_save)
+    plt.xlabel('Number of training examples')
+    plt.ylabel('Error Rate')
+    fig.savefig('./figs/' + r_str_save + 'error_history.png', bbox_inches='tight',
                 dpi=450)
 
 # ----  HELPER SCRIPTS  ---- #
