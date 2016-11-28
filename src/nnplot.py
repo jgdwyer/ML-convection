@@ -469,6 +469,26 @@ def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
             f.savefig(filename, bbox_inches='tight', dpi=450)
             plt.close()
 
+def plot_model_error_over_time(errors, mlp_str, fig_dir):
+    x = np.arange(errors.shape[0])
+    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
+    # Plot error rate vs. iteration number
+    fig = plt.figure()
+    # Plot training errors
+    plt.semilogy(x, np.squeeze(errors[:,0]), alpha=0.5, color='blue',
+                 label='Training')
+    plt.semilogy(x, np.squeeze(errors[:,1]), alpha=0.5, color='blue')
+    plt.yticks(ytix, ytix)
+    plt.ylim((np.nanmin(errors), np.nanmax(errors)))
+    plt.semilogy(x, np.squeeze(errors[:,2]), alpha=0.5, color='green',
+                 label='Testing')
+    plt.semilogy(x, np.squeeze(errors[:,3]), alpha=0.5, color='green')
+    plt.legend()
+    plt.title('Error for ' + mlp_str)
+    plt.xlabel('Iteration Number')
+    fig.savefig(fig_dir + 'error_history.png', bbox_inches='tight', dpi=450)
+    plt.close()
+
 # ----  META-PLOTTING SCRIPTS  ---- #
 def meta_compare_error_rate():
     hid_neur = [5,10,15,20,30,40,50,60,80,100,150]#,225,300] #,450,600]
@@ -521,26 +541,6 @@ def meta_compare_error_rate():
     fig.savefig('./figs/Compare_error_rate_vs_hid_neur.png',bbox_inches='tight',
                 dpi=450)
 
-def meta_plot_model_error_over_time(errors, mlp_str, fig_dir):
-    x = np.arange(errors.shape[0])
-    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
-    # Plot error rate vs. iteration number
-    fig = plt.figure()
-    # Plot training errors
-    plt.semilogy(x, np.squeeze(errors[:,0]), alpha=0.5, color='blue',
-                 label='Training')
-    plt.semilogy(x, np.squeeze(errors[:,1]), alpha=0.5, color='blue')
-    plt.yticks(ytix, ytix)
-    plt.ylim((np.nanmin(errors), np.nanmax(errors)))
-    plt.semilogy(x, np.squeeze(errors[:,2]), alpha=0.5, color='green',
-                 label='Testing')
-    plt.semilogy(x, np.squeeze(errors[:,3]), alpha=0.5, color='green')
-    plt.legend()
-    plt.title('Error for ' + mlp_str)
-    plt.xlabel('Iteration Number')
-    fig.savefig(fig_dir + 'error_history.png', bbox_inches='tight', dpi=450)
-    plt.close()
-
 def meta_plot_model_error_vs_training_examples():
     n_samp = np.array([100,200,500,1000,2000,3500,5000,7500,10000,12500,15000])
     err_trn = []
@@ -584,7 +584,7 @@ def vertical_integral(data, dlev):
     return data
 
 def calc_precip(y, dlev):
-    y = unpack(y,'q')
+    y = unpack(y, 'q')
     y = y / 1000. # kg/kg/day
     return vertical_integral(y, dlev) #mm/day
 
