@@ -7,20 +7,51 @@ import pickle
 import src.nnplot as nnplot
 
 # ---  BUILDING NEURAL NETS  --- #
-def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=None,
-                     minlev=0.0,rainonly=False,data_dir='./data/',
-                     use_weights=False, weight_decay = 0.0, noshallow=False,
+def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
+                     n_iter=None, n_stable=None,
+                     minlev=0.0, weight_precip=False, weight_shallow=False,
+                     weight_decay=0.0, rainonly=False,noshallow=False,
                      N_trn_exs=None):
+    """Loads training data and trains and stores neural network
+
+    Args:
+        num_layers (int): Number of layers in the NN
+        hidneur (int): Number of hidden neurons in each layer
+        x_ppi (dict): The type of preprocessing to do to the features (inputs)
+        y_ppi (dict): The type of preprocessing to do to the targets (outputs)
+        n_iter (int): Number of iterations
+        n_stable (int): Number of iterations after stability reached
+        minlev (float): Don't train on data above this sigma level (assume 0)
+        weight_precip (bool): Weight training examples by precipitation amount
+        weight_shallow (bool): Weight training examples by shallow convection
+        weight_decay (float): Regularization strength. 0 is no regularization
+        rainonly (bool): Only train on precipitating examples
+        noshallow (bool): Don't train on shallow convective events
+        N_trn_exs (int): Number of training examples to learn on
+
+    Returns:
+        str: String id of trained NN
+    """
     # Load training data
-    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(data_dir + \
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata('./data/' + \
                             'convection_50day.pkl', minlev, rainonly=rainonly,
                             noshallow=noshallow, N_trn_exs=N_trn_exs)
     # Set up weights for training examples
-    if use_weights:
-        #_,convection_strength = nnload.whenconvection(y)
-        #w = convection_strength + 1
-        w = Pout*3600*24 + 1
-    else:
+    wp = np.ones(y.shape[0])
+    ws = np.ones(y.shape[0])
+    if weight_precip:
+        wp = Pout + 1
+    if weight_shallow:
+        shallow_lev = np.argmin(np.abs(lev - 0.8)) # 0.8 is near max shlw convc
+        q = nnload.unpack(y, 'q')
+        # Find where moistening is larger than some threshold
+        ind = np.argwhere(q[:,shallow_lev] >= 5)
+        # Set threshold events as proportional
+        ws[ind] = q[ind,shallow_lev]
+    # Combine weights
+    w = wp * ws
+    # Or set weights to none
+    if (not (weight_precip) and not (weight_shallow)):
         w = None
     # Transform data according to input preprocessor requirements
     x_pp = nnload.init_pp(x_ppi, x)
@@ -32,20 +63,16 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=No
     pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
     # Add number of training examples to string
     pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
-    # Subsample data
-    x1 = x
-    y1 = y
-    #x1, x2, x3, y1, y2, y3 = nnload.subsample(x, y, N_samples=10000)
-    # Build neural network
     if weight_decay > 0.0:
         regularize = 'L2'
     else:
         regularize = None
+    # Build neural network
     r_mlp, r_str = build_nn('regress', num_layers, 'Rectifier', hidneur,
                             'momentum', pp_str, batch_size=100,n_stable=n_stable,n_iter=n_iter,
                             learning_momentum=0.9,learning_rate=0.01,f_stable=.0007,
                             regularize=regularize, weight_decay=weight_decay)
-    if use_weights:
+    if weight_precip:
         r_str = r_str + '_w2'
     #w1 "convection strength"
     #w2 precip amount
@@ -54,11 +81,11 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi, n_iter=None, n_stable=No
     print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' + str(x.shape[1]) + \
           ' input features and ' + str(y.shape[1]) + ' output targets')
     # Train neural network
-    r_mlp, r_errors = train_nn(r_mlp, r_str, x1, y1, w)
+    r_mlp, r_errors = train_nn(r_mlp, r_str, x, y, w)
     # Save neural network
     pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev],
-                open(data_dir + 'regressors/' + r_str + '.pkl', 'wb'))
-    # Plot figures (with validation data)
+                open('./data/regressors/' + r_str + '.pkl', 'wb'))
+    # Plot figures with validation data (and with training data)
     nnplot.plot_all_figs(r_str, noshallow=noshallow, rainonly=rainonly)
     nnplot.plot_all_figs(r_str, datasource='./data/convection_50day.pkl',
                           validation=False, noshallow=noshallow, rainonly=rainonly)
