@@ -6,7 +6,7 @@ import pickle
 import warnings
 
 def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
-             rainonly=False, noshallow=False, verbose=True):
+             rainonly=False, noshallow=False, cosflag=True, verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
        the input filename is generated.
 
@@ -24,6 +24,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
       noshallow: If true, only return training examples of when the shallow
                  convection scheme does NOT happen. (So, only return examples
                  with deep convection, or no convection at all)
+      cosflag:   If true, use cos(lat) weighting for loading training examples
       verbose:   If true, prints some basic stats about training set
 
     Returns:
@@ -58,19 +59,27 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
     # Use this to calculate the real sigma levels
     lev, dlev, indlev = get_levs(minlev)
     varis = ['Tin', 'qin', 'Tout', 'qout']
+    # Reshape the arrays
     for var in varis:
         # Change shape of data to be N_samp x N_lev
         if all_lats:
-            v[var] = reshape_all_lats(v[var], indlev)
+            # print('error')
+            if cosflag:
+                v[var] = reshape_cos_lats(v[var], indlev, lat)
+            else:
+                v[var] = reshape_all_lats(v[var], indlev)
         else:
             if indlat is not None:
                 v[var] = reshape_one_lat(v[var], indlev, indlat)
             else:
                 raise TypeError('Need to set an index value for indlat')
-    # Do the same for precip
+    # Also reshape precipitation
     if all_lats:
-        # Need to do a transpose to be consistent with reshape_all_lats
-        Pout = np.reshape(Pout.transpose(), -1)
+        if cosflag:
+            Pout = reshape_cos_lats(Pout, None, lat, is_precip=True)
+        else:
+            # Need to do a transpose to be consistent with reshape_all_lats
+            Pout = np.reshape(Pout.transpose(), -1)
     else:
         Pout = Pout[indlat,:]
     # Randomize the order of these events
@@ -102,15 +111,32 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
     timestep = 10*60 # 10 minute timestep in seconds
     return x, y, cv, Pout, lat, lev, dlev, timestep
 
+def reshape_cos_lats(z, indlev, lat, is_precip=False):
+    if is_precip:
+        z = z.swapaxes(0, 1)
+        z2 = np.empty((0))
+    else:
+        z = z[indlev,:,:]
+        z = z.swapaxes(0, 2)
+        z2 = np.empty((0,sum(indlev)))
+    N_ex = z.shape[0]
+    for i, latval in enumerate(lat):
+        Ninds = int(N_ex * np.cos(np.deg2rad(latval)))
+        if is_precip:
+            z2 = np.concatenate((z2, z[0:Ninds,i]), axis=0)
+        else:
+            z2 = np.concatenate((z2, z[0:Ninds,i,:]), axis=0)
+    return z2
+
 def reshape_all_lats(z, indlev):
     # Expects data to be N_lev x N_lat x N_samples and returns (N_lat*N_samp x N_lev)
     z = z[indlev,:,:]
-    z = z.swapaxes(0,2)
+    z = z.swapaxes(0, 2)
     return np.reshape(z, (-1, sum(indlev)))
 def reshape_one_lat(z, indlev, indlat):
     # Expects data to be N_lev x N_lat x N_samples and returns (N_samp x N_lev)
     z = z[indlev,indlat,:]
-    z = z.swapaxes(0,1)
+    z = z.swapaxes(0, 1)
     return z
 
 def pack(d1, d2, axis=1):
