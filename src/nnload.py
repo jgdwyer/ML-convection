@@ -49,7 +49,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
       timestep: How large each model timestep is in seconds.
     """
     # Data to read in is N_lev x N_lat (SH & NH) x N_samples
-    # Samples are quasi indpendent with only 10 from each latitude range chosen
+    # Samples are quasi indpendent with only 5 from each latitude range chosen
     # randomly over different longitudes and times within that 24 hour period.
     # Need to use encoding because saved using python2: http://stackoverflow.com/q/28218466
     v = dict()
@@ -57,34 +57,35 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
                           pickle.load(open(filename, 'rb'), encoding='latin1')
     # Use this to calculate the real sigma levels
     lev, dlev, indlev = get_levs(minlev)
-    # Comine NH & SH data since they are statistically equivalent
     varis = ['Tin', 'qin', 'Tout', 'qout']
     for var in varis:
-        [v[var], lat2] = avg_hem(v[var], lat, axis=1)
         # Change shape of data to be N_samp x N_lev
         if all_lats:
             v[var] = reshape_all_lats(v[var], indlev)
         else:
             if indlat is not None:
                 v[var] = reshape_one_lat(v[var], indlev, indlat)
-                # Pout = Pout[indlat,:]
             else:
                 raise TypeError('Need to set an index value for indlat')
+    # Do the same for precip
+    if all_lats:
+        # Need to do a transpose to be consistent with reshape_all_lats
+        Pout = np.reshape(Pout.transpose(), -1)
+    else:
+        Pout = Pout[indlat,:]
     # Randomize the order of these events
     m = v['Tin'].shape[0]
     randind = np.random.permutation(m)
     for var in varis:
         v[var] = v[var][randind,:]
-    timestep = 10*60 # 10 minute timestep in seconds
+    Pout = Pout[randind]
     # Converted heating rates to K/day and g/kg/day in prep_convection_output.py
     # Concatenate input and output variables together
     x = pack(v['Tin'],  v['qin'] , axis=1)
     y = pack(v['Tout'], v['qout'], axis=1)
-    import src.nnplot as nnplot
-    Pout2 = nnplot.calc_precip(y, dlev)
     # The outputs get lined up in prep_convection_output.py
     # Print some statistics about rain and limit to when it's raining if True
-    x, y, Pout2 = limitrain(x, y, Pout2, rainonly, noshallow=noshallow,
+    x, y, Pout = limitrain(x, y, Pout, rainonly, noshallow=noshallow,
                            verbose=verbose)
     # Limit to only certain events if requested
     if N_trn_exs is not None:
@@ -95,10 +96,11 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
         ind = np.arange(N_trn_exs)
         x = x[ind,:]
         y = y[ind,:]
-        Pout2 = Pout2[:]
+        Pout = Pout[ind]
     # Store when convection occurs
     cv,_ = whenconvection(y, verbose=verbose)
-    return (x, y, cv, Pout2, lat2, lev, dlev, timestep)
+    timestep = 10*60 # 10 minute timestep in seconds
+    return x, y, cv, Pout, lat, lev, dlev, timestep
 
 def reshape_all_lats(z, indlev):
     # Expects data to be N_lev x N_lat x N_samples and returns (N_lat*N_samp x N_lev)
@@ -109,17 +111,17 @@ def reshape_one_lat(z, indlev, indlat):
     # Expects data to be N_lev x N_lat x N_samples and returns (N_samp x N_lev)
     z = z[indlev,indlat,:]
     z = z.swapaxes(0,1)
-    return np.reshape(z, (-1, sum(indlev)))
+    return z
 
-def pack(d1,d2,axis=1):
+def pack(d1, d2, axis=1):
     """Combines T & q profiles as an input matrix to NN"""
-    return np.concatenate((d1,d2), axis=axis)
+    return np.concatenate((d1, d2), axis=axis)
 
-def unpack(data,vari,axis=1):
+def unpack(data, vari, axis=1):
     """Reverse pack operation to turn ouput matrix into T & q"""
     N = int(data.shape[axis]/2)
-    varipos = {'T':np.arange(N),'q':np.arange(N,2*N)}
-    out = np.take(data,varipos[vari],axis=axis)
+    varipos = {'T':np.arange(N), 'q':np.arange(N,2*N)}
+    out = np.take(data, varipos[vari], axis=axis)
     return out
 
 # Initialize & fit scaler
@@ -224,13 +226,13 @@ def subsample(x, y, N_samples=0):
     y1, y2, y3 = split_sample(y, samples, ss)
     return x1, x2, x3, y1, y2, y3
 
-def limitrain(x,y,Pout, rainonly=False, noshallow=False, verbose=True):
+def limitrain(x, y, Pout, rainonly=False, noshallow=False, verbose=True):
     indrain = np.greater(Pout, 0)
     if verbose:
         print('There is some amount of rain %.1f%% of the time'
           %(100.*np.sum(indrain)/len(indrain)))
         print('There is a rate of >3 mm/day %.1f%% of the time'
-          %(100.*np.sum(np.greater(Pout,3))/len(indrain)))
+          %(100.*np.sum(np.greater(Pout, 3))/len(indrain)))
     if rainonly:
         x = x[indrain,:]
         y = y[indrain,:]
