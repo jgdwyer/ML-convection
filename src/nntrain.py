@@ -11,7 +11,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                      n_iter=None, n_stable=None,
                      minlev=0.0, weight_precip=False, weight_shallow=False,
                      weight_decay=0.0, rainonly=False,noshallow=False,
-                     N_trn_exs=None):
+                     N_trn_exs=None, convcond=False):
     """Loads training data and trains and stores neural network
 
     Args:
@@ -28,13 +28,22 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         rainonly (bool): Only train on precipitating examples
         noshallow (bool): Don't train on shallow convective events
         N_trn_exs (int): Number of training examples to learn on
+        convcond (bool): If true, learn to do convection + condensation
 
     Returns:
         str: String id of trained NN
     """
     # Load training data
-    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata('./data/' + \
-                            'convection_50day.pkl', minlev, rainonly=rainonly,
+    if convcond:
+        trainfile = './data/convcond_training_v3.pkl'
+        testfile = './data/convcond_testing_v3.pkl'
+        pp_str = 'convcond_'
+    else:
+        trainfile = './data/conv_training_v3.pkl'
+        testfile = './data/conv_testing_v3.pkl'
+        pp_str = ''
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(trainfile,
+                            minlev, rainonly=rainonly,
                             noshallow=noshallow, N_trn_exs=N_trn_exs)
     # Set up weights for training examples
     wp = np.ones(y.shape[0])
@@ -59,7 +68,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     y_pp = nnload.init_pp(y_ppi, y)
     y    = nnload.transform_data(y_ppi, y_pp, y)
     # Make preprocessor string for saving
-    pp_str =          'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
+    pp_str = pp_str + 'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
     pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
     # Add number of training examples to string
     pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
@@ -78,6 +87,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     #w2 precip amount
     #w3 precip amount*10
     #w4 precip amount*100
+    r_str = r_str + '_v3' # reflects that we are loading v3 of training data
     print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' + str(x.shape[1]) + \
           ' input features and ' + str(y.shape[1]) + ' output targets')
     # Train neural network
@@ -86,9 +96,10 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev],
                 open('./data/regressors/' + r_str + '.pkl', 'wb'))
     # Plot figures with validation data (and with training data)
-    nnplot.plot_all_figs(r_str, noshallow=noshallow, rainonly=rainonly)
-    nnplot.plot_all_figs(r_str, datasource='./data/convection_50day.pkl',
-                          validation=False, noshallow=noshallow, rainonly=rainonly)
+    nnplot.plot_all_figs(r_str, datasource=testfile, noshallow=noshallow,
+                         rainonly=rainonly)
+    nnplot.plot_all_figs(r_str, datasource=trainfile, validation=False,
+                         noshallow=noshallow, rainonly=rainonly)
     return r_str
 
 def store_stats(i, avg_train_error, best_train_error, avg_valid_error, best_valid_error,**_):
@@ -135,7 +146,7 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
         mlp_str = mlp_str + 'reg' + str(weight_decay)
     # Add the number of iterations too
     mlp_str = mlp_str + '_Niter' + str(n_iter)
-    return mlp,mlp_str
+    return mlp, mlp_str
 
 
 def build_randomforest(method,mlp,mlp_str):
