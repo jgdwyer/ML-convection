@@ -14,8 +14,8 @@ unpack = nnload.unpack
 # ---   META PLOTTING SCRIPTS  --- #
 #def plots_by_lat(pp_x, pp_y, r_mlp, lat):
 
-def plot_all_figs(r_str, datasource='./data/convection_50day_validation.pkl',
-                  validation=True, noshallow=False, rainonly=False):
+def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
+                  rainonly=False):
     # Open the neural network and the preprocessing scheme
     r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
            pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
@@ -299,22 +299,33 @@ def check_scaling_distribution(x_unscl, x_scl, y_unscl, y_scl, lat, lev, figpath
     fig.savefig(figpath + 'output_scaling_check.png',bbox_inches='tight',dpi=450)
     plt.close()
 
-def check_output_distribution(yt_unscl, yt_scl, yp_unscl, yp_scl, lat, lev, figpath):
+def check_output_distribution(yt_unscl, yt_scl, yp_unscl, yp_scl, lat, lev,
+                              figpath):
     # For unscaled variables
     fig, ax = plt.subplots(2, 2)
-    x1, x2, bins = _plot_distribution(unpack(yp_unscl,'T'), lat, lev, fig, ax[0,1], './figs/','T pred (unscld) [K/day]','')
-    _plot_distribution(unpack(yt_unscl,'T'), lat, lev, fig, ax[0,0], './figs/','T true (unscld) [K/day]','',x1,x2, bins)
-    x1,x2, bins=_plot_distribution(unpack(yp_unscl,'q'), lat, lev, fig, ax[1,1], './figs/','q pred (unscld) [g/kg/day]','')
-    _plot_distribution(unpack(yt_unscl,'q'), lat, lev, fig, ax[1,0], './figs/','q true (unscld) [g/kg/day]','',x1,x2, bins)
-    fig.savefig(figpath + 'output_compare_true_pred_unscaled.png',bbox_inches='tight',dpi=450)
+    x1, x2, bins = _plot_distribution(unpack(yt_unscl,'T'), lat, lev, fig,
+        ax[0,0], './figs/',r'$\Delta$T true (unscld) [K/day]','')
+    _plot_distribution(unpack(yp_unscl,'T'), lat, lev, fig,
+        ax[0,1], './figs/',r'$\Delta$T pred (unscld) [K/day]','',x1, x2, bins)
+    x1,x2, bins=_plot_distribution(unpack(yt_unscl,'q'), lat, lev, fig,
+        ax[1,0], './figs/',r'$\Delta$q true (unscld) [g/kg/day]','')
+    _plot_distribution(unpack(yp_unscl,'q'), lat, lev, fig,
+        ax[1,1], './figs/',r'$\Delta$q pred (unscld) [g/kg/day]','',x1, x2, bins)
+    fig.savefig(figpath + 'output_compare_true_pred_unscaled.png',
+        bbox_inches='tight', dpi=450)
     plt.close()
     # For scaled variables
     fig, ax = plt.subplots(2, 2)
-    x1,x2,bins=_plot_distribution(unpack(yp_scl,'T'), lat, lev, fig, ax[0,1], './figs/','T pred (scld) []','')
-    _plot_distribution(unpack(yt_scl,'T'), lat, lev, fig, ax[0,0], './figs/','T true (scld) []','',x1,x2, bins)
-    x1,x2,bins=_plot_distribution(unpack(yp_scl,'q'), lat, lev, fig, ax[1,1], './figs/','q pred (scld) []','')
-    _plot_distribution(unpack(yt_scl,'q'), lat, lev, fig, ax[1,0], './figs/','q true (scld) []','',x1,x2, bins)
-    fig.savefig(figpath + 'output_compare_true_pred_scaled.png',bbox_inches='tight',dpi=450)
+    x1,x2,bins=_plot_distribution(unpack(yt_scl,'T'), lat, lev, fig,
+        ax[0,0], './figs/',r'$\Delta$T true (scld) []','')
+    _plot_distribution(unpack(yp_scl,'T'), lat, lev, fig,
+        ax[0,1], './figs/',r'$\Delta$T pred (scld) []','',x1, x2, bins)
+    x1,x2,bins=_plot_distribution(unpack(yt_scl,'q'), lat, lev, fig,
+        ax[1,0], './figs/',r'$\Delta$q true (scld) []','')
+    _plot_distribution(unpack(yp_scl,'q'), lat, lev, fig,
+        ax[1,1], './figs/',r'$\Delta$q pred (scld) []','',x1, x2, bins)
+    fig.savefig(figpath + 'output_compare_true_pred_scaled.png',
+        bbox_inches='tight', dpi=450)
     plt.close()
 
 def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr, xl=None,
@@ -323,7 +334,7 @@ def _plot_distribution(z, lat, lev, fig, ax, figpath, titlestr, xstr, xl=None,
     # Initialize the bins and the frequency
     num_bins = 100
     if bins is None:
-        bins = np.linspace(np.amin(z), np.amax(z), num_bins+1)
+        bins = np.linspace(np.percentile(z, .02), np.percentile(z, 99.98), num_bins+1)
     n = np.zeros((num_bins, lev.size))
     # Calculate distribution at each level
     for i in range(lev.size):
