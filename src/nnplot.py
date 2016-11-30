@@ -57,12 +57,15 @@ def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
     # Plot some example profiles
     plot_sample_profiles(20, x_unscl, ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot mean, bias, rmse, r^2  (lat vs lev)
-    make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
+    make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
+                       datasource)
 
-def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev):
+def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
+                       datafile):
     # Load data at each level
     Tmean, qmean, Tbias, qbias, rmseT, rmseq, rT, rq = \
-          nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev)
+          nnload.stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
+                                 datafile)
     # Make figs
     # True means
     f,ax1,ax2 = plot_contour(Tmean,qmean,lat,lev, avg_hem=False)
