@@ -6,11 +6,12 @@ import src.nnload as nnload
 import pickle
 import src.nnplot as nnplot
 
+
 # ---  BUILDING NEURAL NETS  --- #
 def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                      n_iter=None, n_stable=None,
                      minlev=0.0, weight_precip=False, weight_shallow=False,
-                     weight_decay=0.0, rainonly=False,noshallow=False,
+                     weight_decay=0.0, rainonly=False, noshallow=False,
                      N_trn_exs=None, convcond=False):
     """Loads training data and trains and stores neural network
 
@@ -42,21 +43,22 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         trainfile = './data/conv_training_v3.pkl'
         testfile = './data/conv_testing_v3.pkl'
         pp_str = ''
-    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(trainfile,
-                            minlev, rainonly=rainonly,
-                            noshallow=noshallow, N_trn_exs=N_trn_exs)
+    x, y, cv, Pout, lat, lev, dlev, timestep = \
+        nnload.loaddata(trainfile, minlev, rainonly=rainonly,
+                        noshallow=noshallow, N_trn_exs=N_trn_exs)
     # Set up weights for training examples
     wp = np.ones(y.shape[0])
     ws = np.ones(y.shape[0])
     if weight_precip:
         wp = Pout + 1
     if weight_shallow:
-        shallow_lev = np.argmin(np.abs(lev - 0.8)) # 0.8 is near max shlw convc
+        # 0.8 is near the level of maximum shallow convective activity
+        shallow_lev = np.argmin(np.abs(lev - 0.8))
         q = nnload.unpack(y, 'q')
         # Find where moistening is larger than some threshold
-        ind = np.argwhere(q[:,shallow_lev] >= 5)
+        ind = np.argwhere(q[:, shallow_lev] >= 5)
         # Set threshold events as proportional
-        ws[ind] = q[ind,shallow_lev]
+        ws[ind] = q[ind, shallow_lev]
     # Combine weights
     w = wp * ws
     # Or set weights to none
@@ -64,9 +66,9 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         w = None
     # Transform data according to input preprocessor requirements
     x_pp = nnload.init_pp(x_ppi, x)
-    x    = nnload.transform_data(x_ppi, x_pp, x)
+    x = nnload.transform_data(x_ppi, x_pp, x)
     y_pp = nnload.init_pp(y_ppi, y)
-    y    = nnload.transform_data(y_ppi, y_pp, y)
+    y = nnload.transform_data(y_ppi, y_pp, y)
     # Make preprocessor string for saving
     pp_str = pp_str + 'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
     pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
@@ -78,23 +80,27 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         regularize = None
     # Build neural network
     r_mlp, r_str = build_nn('regress', num_layers, 'Rectifier', hidneur,
-                            'momentum', pp_str, batch_size=100,n_stable=n_stable,n_iter=n_iter,
-                            learning_momentum=0.9,learning_rate=0.01,f_stable=.0007,
+                            'momentum', pp_str, batch_size=100,
+                            n_stable=n_stable, n_iter=n_iter,
+                            learning_momentum=0.9, learning_rate=0.01,
                             regularize=regularize, weight_decay=weight_decay)
     if weight_precip:
-        r_str = r_str + '_w2'
-    #w1 "convection strength"
-    #w2 precip amount
-    #w3 precip amount*10
-    #w4 precip amount*100
-    r_str = r_str + '_v3' # reflects that we are loading v3 of training data
-    print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' + str(x.shape[1]) + \
-          ' input features and ' + str(y.shape[1]) + ' output targets')
+        r_str = r_str + '_wpr'
+    if weight_shallow:
+        r_str = r_str + '_wsh'
+    # w1 "convection strength"
+    # w2 precip amount
+    # w3 precip amount*10
+    # w4 precip amount*100
+    r_str = r_str + '_v3'  # reflects that we are loading v3 of training data
+    print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' +
+          str(x.shape[1]) + ' input features and ' + str(y.shape[1]) +
+          ' output targets')
     # Train neural network
     r_mlp, r_errors = train_nn(r_mlp, r_str, x, y, w)
     # Save neural network
-    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev],
-                open('./data/regressors/' + r_str + '.pkl', 'wb'))
+    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev,
+                 dlev], open('./data/regressors/' + r_str + '.pkl', 'wb'))
     # Plot figures with validation data (and with training data)
     nnplot.plot_all_figs(r_str, datasource=testfile, noshallow=noshallow,
                          rainonly=rainonly)
@@ -102,45 +108,65 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                          noshallow=noshallow, rainonly=rainonly)
     return r_str
 
-def store_stats(i, avg_train_error, best_train_error, avg_valid_error, best_valid_error,**_):
-    if i==1:
+
+def store_stats(i, avg_train_error, best_train_error, avg_valid_error,
+                best_valid_error, **_):
+    if i == 1:
         global errors_stored
         errors_stored = []
-    errors_stored.append((avg_train_error, best_train_error, avg_valid_error, best_valid_error))
+    errors_stored.append((avg_train_error, best_train_error, avg_valid_error,
+                          best_valid_error))
+
 
 def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
              batch_size=100, n_iter=None, n_stable=None,
              learning_rate=0.01, learning_momentum=0.9,
              regularize='L2', weight_decay=0.0, valid_size=0.5,
              f_stable=.001):
-    """Builds a multi-layer perceptron via the scikit neural network interface"""
+    """Builds a multi-layer perceptron via the scikit neural network interface
+    """
     # First build layers
     actv_fnc = num_layers*[actv_fnc]
     hid_neur = num_layers*[hid_neur]
-    layers = [sknn.mlp.Layer(f,units=h) for f,h in zip(actv_fnc,hid_neur)]
-    # Append a linear output layer if regressing and a softmax layer if classifying
+    layers = [sknn.mlp.Layer(f, units=h) for f, h in zip(actv_fnc, hid_neur)]
+    # Append a linear output layer if regressing and a softmax layer if
+    # classifying
     if method == 'regress':
         layers.append(sknn.mlp.Layer("Linear"))
-        mlp = sknn.mlp.Regressor(layers,n_iter=n_iter,batch_size=batch_size,learning_rule=learning_rule,
-                                 learning_rate=learning_rate,learning_momentum=learning_momentum,
-                                 regularize = regularize, weight_decay = weight_decay, n_stable=n_stable,
-                                 valid_size=valid_size, f_stable=f_stable,
+        mlp = sknn.mlp.Regressor(layers,
+                                 n_iter=n_iter,
+                                 batch_size=batch_size,
+                                 learning_rule=learning_rule,
+                                 learning_rate=learning_rate,
+                                 learning_momentum=learning_momentum,
+                                 regularize=regularize,
+                                 weight_decay=weight_decay,
+                                 n_stable=n_stable,
+                                 valid_size=valid_size,
+                                 f_stable=f_stable,
                                  callback={'on_epoch_finish': store_stats})
     if method == 'classify':
         layers.append(sknn.mlp.Layer("Softmax"))
-        mlp = sknn.mlp.Classifier(layers,n_iter=n_iter,batch_size=batch_size,learning_rule=learning_rule,
-                                 learning_rate=learning_rate,learning_momentum=learning_momentum,
-                                 regularize = regularize, weight_decay = weight_decay, n_stable=n_stable,
-                                 valid_size=valid_size, callback={'on_epoch_finish': store_stats})
-    #Write nn string
+        mlp = sknn.mlp.Classifier(layers,
+                                  n_iter=n_iter,
+                                  batch_size=batch_size,
+                                  learning_rule=learning_rule,
+                                  learning_rate=learning_rate,
+                                  learning_momentum=learning_momentum,
+                                  regularize=regularize,
+                                  weight_decay=weight_decay,
+                                  n_stable=n_stable,
+                                  valid_size=valid_size,
+                                  callback={'on_epoch_finish': store_stats})
+    # Write nn string
     layerstr = '_'.join([str(h) + f[0] for h, f in zip(hid_neur, actv_fnc)])
     if learning_rule == 'momentum':
         lrn_str = str(learning_momentum)
     else:
         lrn_str = str(learning_rate)
     # Construct name
-    mlp_str = pp_str + method[0] + "_" +  layerstr + "_" + learning_rule[0:3] + \
-              lrn_str
+    mlp_str = pp_str + method[0] + "_" + layerstr + "_" + learning_rule[0:3] +\
+        lrn_str
     # If using regularization, add that to the name too
     if weight_decay > 0.0:
         mlp_str = mlp_str + 'reg' + str(weight_decay)
@@ -149,16 +175,17 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
     return mlp, mlp_str
 
 
-def build_randomforest(method,mlp,mlp_str):
-    methods = {'classify':RandomForestClassifier,
-                'regress':RandomForestRegressor}
-    estimators = {'classify':[200,50,20], 'regress':[200,50,20]}
+def build_randomforest(method, mlp, mlp_str):
+    methods = {'classify': RandomForestClassifier,
+               'regress': RandomForestRegressor}
+    estimators = {'classify': [200, 50, 20], 'regress': [200, 50, 20]}
     for estimator in estimators[method]:
         mlp.append(methods[method](n_estimators=estimator))
         mlp_str.append(method[0] + '_RF_' + str(estimator))
     return mlp, mlp_str
 
-def train_nn(mlp,mlp_str,x,y, w=None):
+
+def train_nn(mlp, mlp_str, x, y, w=None):
     """Train each item in a list of multi-layer perceptrons and then score
     on test data. Expects that mlp is a list of MLP objects"""
     # Initialize
@@ -169,24 +196,79 @@ def train_nn(mlp,mlp_str,x,y, w=None):
     end = time.time()
     print("Training Score: {:.4f} for Model {:s} ({:.1f} seconds)".format(
                                               train_score, mlp_str, end-start))
-    errors = np.asarray(errors_stored) # This is an N_iter x 4 array...see score_stats
+    # This is an N_iter x 4 array...see score_stats
+    errors = np.asarray(errors_stored)
     # Return the fitted models and the scores
     return mlp, errors
 
 
 # ---  EVALUATING NEURAL NETS  --- #
 
-def classify(classifier,x,y):
+def calc_mse(y_pred, y_true):
+    """Calculates the mean squared error for scaled outputs and is taken over
+       all training examples and levels of T and q
+       Args:
+        y_pred (float: Nex x N_lev*2): Scaled predicted value of output
+        y_true (float Nex x N_lev*2): Scaled true value of output
+       Returns:
+        mse (float, scalar): Mean-Squared error """
+    mse = np.mean(np.square(y_pred - y_true))
+    return mse
+
+
+def compare_convcond_prediction(cv_str, cvcd_str):
+    cv_mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, _ = \
+        pickle.load(open('./data/regressors/' + cv_str + '.pkl', 'rb'))
+    cvcd_mlp, _, errors, x_ppi_check, y_ppi_check, x_pp, y_pp, lat, lev, _ = \
+        pickle.load(open('./data/regressors/' + cvcd_str + '.pkl', 'rb'))
+    # Check that preprocessers are the same
+    if ((x_ppi != x_ppi_check) or (y_ppi != y_ppi_check)):
+        raise ValueError('Preprocessing schemes different for conv only and ' +
+                         'conv+cond!')
+    # Load data
+    x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
+        nnload.loaddata('./data/conv_testing_v3.pkl', minlev=0.1,
+                        N_trn_exs=10000, randseed=True)
+    xcvcd_unscl, ytcvcd_unscl, _, _, _, _, _, _ = \
+        nnload.loaddata('./data/convcond_testing_v3.pkl', minlev=0.1,
+                        N_trn_exs=10000, randseed=True)
+    # Check that x values are the same to make sure random seeds are same
+    if np.sum(np.abs(x_unscl - xcvcd_unscl)) > 0.0:
+        raise ValueError('Data loaded in different order!')
+    # Convert true y-values to scaled by applying an inverse transformation
+    ytcv_scl = nnload.transform_data(y_ppi, y_pp, ytcv_unscl)
+    ytcvcd_scl = nnload.transform_data(y_ppi, y_pp, ytcvcd_unscl)
+    # Derived true y-values for cond only
+    ytcd_scl = ytcvcd_scl - ytcvcd_scl
+    # Apply x preprocessing to scale x-data
+    x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
+    # Calculate predicted y values for conv and convcond
+    ypcv_scl = cv_mlp.predict(x_scl)
+    ypcvcd_scl = cvcd_mlp.predict(x_scl)
+    # Add true cond values to ycv_true and ycv_pred
+    mse_cvcd_predictboth = calc_mse(ypcvcd_scl, ytcvcd_scl)
+    mse_cv = calc_mse(ypcv_scl, ytcv_scl)
+    mse_cvcd_predictone = calc_mse(ypcv_scl + ytcd_scl, ytcv_scl + ytcd_scl)
+    print('MSE predicting convection and condensation in one step: {:.5f}'.
+          format(mse_cvcd_predictboth))
+    print('MSE predicting convection and adding true condensation: {:.5f}'.
+          format(mse_cvcd_predictone))
+    print('MSE predicting convection only (no condensation): {:.5f}'.
+          format(mse_cv))
+    # Calculate MSE for both types
+
+
+def classify(classifier, x, y):
     """Applies a trained classifier to input x and y and
     outputs data when classifier expects convection is occurring."""
     # Apply classifier
     out = classifier.predict(x)
     # Get samples of when classifier predicts that it is convecting
-    ind = np.squeeze(np.not_equal(out,0))
+    ind = np.squeeze(np.not_equal(out, 0))
     # Store data only when it is convection is predicted
-    x = x[ind,:]
-    y = y[ind,:]
-    return x,y
+    x = x[ind, :]
+    y = y[ind, :]
+    return x, y
 
 def plot_classifier_hist(pred,y,tistr):
     """Make histograms of the classification scores binned by the
