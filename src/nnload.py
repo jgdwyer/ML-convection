@@ -5,14 +5,16 @@ import scipy.stats
 import pickle
 import warnings
 
+
 def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
-             rainonly=False, noshallow=False, cosflag=True, verbose=True):
+             rainonly=False, noshallow=False, cosflag=True, randseed=False,
+             verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
        the input filename is generated.
 
     Args:
-      filename:  The file to be loaded. Use convection_50day.pkl  or
-                 convection_50day_validation.pkl
+      filename:  The file to be loaded. Use './data/convcond_training_v3.pkl'
+                 or './data/convcond_testing_v3.pkl'
       minlev:    The topmost model level for which to load data. Set to 0. to
                  load all data
       all_lats:  Logical value for whether to load data from all latitudes
@@ -25,6 +27,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
                  convection scheme does NOT happen. (So, only return examples
                  with deep convection, or no convection at all)
       cosflag:   If true, use cos(lat) weighting for loading training examples
+      randseed:  If true, seed the random generator to a recreateable state
       verbose:   If true, prints some basic stats about training set
 
     Returns:
@@ -52,10 +55,11 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
     # Data to read in is N_lev x N_lat (SH & NH) x N_samples
     # Samples are quasi indpendent with only 5 from each latitude range chosen
     # randomly over different longitudes and times within that 24 hour period.
-    # Need to use encoding because saved using python2: http://stackoverflow.com/q/28218466
+    # Need to use encoding because saved using python2:
+    # http://stackoverflow.com/q/28218466
     v = dict()
     [v['Tin'], v['qin'], v['Tout'], v['qout'], Pout, lat] = \
-                          pickle.load(open(filename, 'rb'), encoding='latin1')
+        pickle.load(open(filename, 'rb'), encoding='latin1')
     # Use this to calculate the real sigma levels
     lev, dlev, indlev = get_levs(minlev)
     varis = ['Tin', 'qin', 'Tout', 'qout']
@@ -81,16 +85,19 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
             # Need to do a transpose to be consistent with reshape_all_lats
             Pout = np.reshape(Pout.transpose(), -1)
     else:
-        Pout = Pout[indlat,:]
+        Pout = Pout[indlat, :]
     # Randomize the order of these events
     m = v['Tin'].shape[0]
+    if randseed:
+        np.random.seed(0)
     randind = np.random.permutation(m)
     for var in varis:
-        v[var] = v[var][randind,:]
+        v[var] = v[var][randind, :]
     Pout = Pout[randind]
-    # Converted heating rates to K/day and g/kg/day in prep_convection_output.py
+    # Converted heating rates to K/day and g/kg/day in
+    # prep_convection_output.py
     # Concatenate input and output variables together
-    x = pack(v['Tin'],  v['qin'] , axis=1)
+    x = pack(v['Tin'], v['qin'], axis=1)
     y = pack(v['Tout'], v['qout'], axis=1)
     # The outputs get lined up in prep_convection_output.py
     # Print some statistics about rain and limit to when it's raining if True
@@ -100,82 +107,90 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
     if N_trn_exs is not None:
         if N_trn_exs > y.shape[0]:
             warnings.warn('Requested more samples than available. Using the' +
-                           'maximum number available')
+                          'maximum number available')
             N_trn_exs = y.shape[0]
         ind = np.arange(N_trn_exs)
-        x = x[ind,:]
-        y = y[ind,:]
+        x = x[ind, :]
+        y = y[ind, :]
         Pout = Pout[ind]
     # Store when convection occurs
-    cv,_ = whenconvection(y, verbose=verbose)
-    timestep = 10*60 # 10 minute timestep in seconds
+    cv, _ = whenconvection(y, verbose=verbose)
+    timestep = 10*60  # 10 minute timestep in seconds
     return x, y, cv, Pout, lat, lev, dlev, timestep
+
 
 def reshape_cos_lats(z, indlev, lat, is_precip=False):
     if is_precip:
         z = z.swapaxes(0, 1)
         z2 = np.empty((0))
     else:
-        z = z[indlev,:,:]
+        z = z[indlev, :, :]
         z = z.swapaxes(0, 2)
-        z2 = np.empty((0,sum(indlev)))
+        z2 = np.empty((0, sum(indlev)))
     N_ex = z.shape[0]
     for i, latval in enumerate(lat):
         Ninds = int(N_ex * np.cos(np.deg2rad(latval)))
         if is_precip:
-            z2 = np.concatenate((z2, z[0:Ninds,i]), axis=0)
+            z2 = np.concatenate((z2, z[0: Ninds, i]), axis=0)
         else:
-            z2 = np.concatenate((z2, z[0:Ninds,i,:]), axis=0)
+            z2 = np.concatenate((z2, z[0:Ninds, i, :]), axis=0)
     return z2
 
+
 def reshape_all_lats(z, indlev):
-    # Expects data to be N_lev x N_lat x N_samples and returns (N_lat*N_samp x N_lev)
-    z = z[indlev,:,:]
+    # Expects data to be N_lev x N_lat x N_samples and returns
+    # (N_lat*N_samp x N_lev)
+    z = z[indlev, :, :]
     z = z.swapaxes(0, 2)
     return np.reshape(z, (-1, sum(indlev)))
+
+
 def reshape_one_lat(z, indlev, indlat):
     # Expects data to be N_lev x N_lat x N_samples and returns (N_samp x N_lev)
-    z = z[indlev,indlat,:]
+    z = z[indlev, indlat, :]
     z = z.swapaxes(0, 1)
     return z
+
 
 def pack(d1, d2, axis=1):
     """Combines T & q profiles as an input matrix to NN"""
     return np.concatenate((d1, d2), axis=axis)
 
+
 def unpack(data, vari, axis=1):
     """Reverse pack operation to turn ouput matrix into T & q"""
     N = int(data.shape[axis]/2)
-    varipos = {'T':np.arange(N), 'q':np.arange(N,2*N)}
+    varipos = {'T': np.arange(N), 'q': np.arange(N, 2*N)}
     out = np.take(data, varipos[vari], axis=axis)
     return out
+
 
 # Initialize & fit scaler
 def init_pp(ppi, raw_data):
     # Initialize list of scaler objects
     if ppi['name'] == 'MinMax':
-        pp =[preprocessing.MinMaxScaler(feature_range=(-1.0,1.0)), # for temperature
-                 preprocessing.MinMaxScaler(feature_range=(-1.0,1.0))] # and humidity
+        pp = [preprocessing.MinMaxScaler(feature_range=(-1.0, 1.0)),  # temp
+              preprocessing.MinMaxScaler(feature_range=(-1.0, 1.0))]  # humid.
     elif ppi['name'] == 'MaxAbs':
-        pp =[preprocessing.MaxAbsScaler(), # for temperature
-                 preprocessing.MaxAbsScaler()] # and humidity
+        pp = [preprocessing.MaxAbsScaler(),  # for temperature
+              preprocessing.MaxAbsScaler()]  # and humidity
     elif ppi['name'] == 'StandardScaler':
-        pp =[preprocessing.StandardScaler(), # for temperature
-                 preprocessing.StandardScaler()] # and humidity
+        pp = [preprocessing.StandardScaler(),  # for temperature
+              preprocessing.StandardScaler()]  # and humidity
     elif ppi['name'] == 'RobustScaler':
-        pp =[preprocessing.RobustScaler(), # for temperature
-                 preprocessing.RobustScaler()] # and humidity
+        pp = [preprocessing.RobustScaler(),  # for temperature
+              preprocessing.RobustScaler()]  # and humidity
     elif ppi['name'] == 'SimpleY':
-        pp =[15.,10.] # for temperature
+        pp = [15., 10.]  # for temperature
     else:
         ValueError('Incorrect scaler name')
-    #Initialize scalers with data
+    # Initialize scalers with data
     if ppi['method'] == 'individually':
-        pp[0].fit(unpack(raw_data,'T'))
-        pp[1].fit(unpack(raw_data,'q'))
+        pp[0].fit(unpack(raw_data, 'T'))
+        pp[1].fit(unpack(raw_data, 'q'))
     elif ppi['method'] == 'alltogether':
-        pp[0].fit(np.reshape(unpack(raw_data,'T'), (-1,1)))
-        pp[1].fit(np.reshape(unpack(raw_data,'q'), (-1,1)))
+        pp[0].fit(np.reshape(unpack(raw_data, 'T'), (-1, 1)))
+        pp[1].fit(np.reshape(unpack(raw_data, 'q'), (-1, 1)))
     elif ppi['method'] == 'qTindividually':
         if ppi['name'] != 'SimpleY':
             pp = pp[0]
@@ -184,16 +199,18 @@ def init_pp(ppi, raw_data):
         raise ValueError('Incorrect scaler method')
     return pp
 
+
 # Transform data using initialized scaler
 def transform_data(ppi, pp, raw_data):
     if ppi['method'] == 'individually':
-        T_data = pp[0].transform(unpack(raw_data,'T'))
-        q_data = pp[1].transform(unpack(raw_data,'q'))
+        T_data = pp[0].transform(unpack(raw_data, 'T'))
+        q_data = pp[1].transform(unpack(raw_data, 'q'))
     elif ppi['method'] == 'alltogether':
-        T_data = pp[0].transform(np.reshape(unpack(raw_data,'T'), (-1,1)))
-        q_data = pp[1].transform(np.reshape(unpack(raw_data,'q'), (-1,1)))
-        # Return to original shape (N_samples x N_features) rather than (N_s*N_f x 1)
-        shp = unpack(raw_data,'T').shape
+        T_data = pp[0].transform(np.reshape(unpack(raw_data, 'T'), (-1, 1)))
+        q_data = pp[1].transform(np.reshape(unpack(raw_data, 'q'), (-1, 1)))
+        # Return to original shape (N_samples x N_features) rather than
+        # (N_s*N_f x 1)
+        shp = unpack(raw_data, 'T').shape
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
     elif ppi['method'] == 'qTindividually':
@@ -210,22 +227,26 @@ def transform_data(ppi, pp, raw_data):
     # Return single transformed array as output
     return pack(T_data, q_data)
 
+
 # Apply inverse transformation to unscale data
 def inverse_transform_data(ppi, pp, trans_data):
     if ppi['method'] == 'individually':
-        T_data = pp[0].inverse_transform(unpack(trans_data,'T'))
-        q_data = pp[1].inverse_transform(unpack(trans_data,'q'))
+        T_data = pp[0].inverse_transform(unpack(trans_data, 'T'))
+        q_data = pp[1].inverse_transform(unpack(trans_data, 'q'))
     elif ppi['method'] == 'alltogether':
-        T_data = pp[0].inverse_transform(np.reshape(unpack(trans_data,'T'), (-1,1)))
-        q_data = pp[1].inverse_transform(np.reshape(unpack(trans_data,'q'), (-1,1)))
-        # Return to original shape (N_samples x N_features) rather than (N_s*N_f x 1)
-        shp = unpack(trans_data,'T').shape
+        T_data = pp[0].inverse_transform(np.reshape(unpack(trans_data, 'T'),
+                                                    (-1, 1)))
+        q_data = pp[1].inverse_transform(np.reshape(unpack(trans_data, 'q'),
+                                                    (-1, 1)))
+        # Return to original shape (N_samples x N_features) rather than
+        # (N_s*N_f x 1)
+        shp = unpack(trans_data, 'T').shape
         T_data = np.reshape(T_data, shp)
         q_data = np.reshape(q_data, shp)
     elif ppi['method'] == 'qTindividually':
         if ppi['name'] == 'SimpleY':
-            T_data = unpack(trans_data,'T') * pp[0]
-            q_data = unpack(trans_data,'q') * pp[1]
+            T_data = unpack(trans_data, 'T') * pp[0]
+            q_data = unpack(trans_data, 'q') * pp[1]
         else:
             all_data = pp.inverse_transform(trans_data)
             T_data = unpack(all_data, 'T')
@@ -235,45 +256,50 @@ def inverse_transform_data(ppi, pp, trans_data):
     # Return single transformed array as output
     return pack(T_data, q_data)
 
+
 def subsample(x, y, N_samples=0):
     """Preprocess data by splitting it into 3 equally sized samples"""
-    if N_samples==0: N_samples = x.shape[0]
+    if N_samples == 0:
+        N_samples = x.shape[0]
     # Randomly choose samples
     samples = np.random.choice(x.shape[0], N_samples, replace=False)
     # Split data
-    ss = int(np.floor(len(samples)/3)) # number of samples in each set
+    ss = int(np.floor(len(samples)/3))  # number of samples in each set
+
     def split_sample(z, samples, ss):
-        z1 = np.take(z,samples[   0:  ss], axis=0)
-        z2 = np.take(z,samples[  ss:2*ss], axis=0)
-        z3 = np.take(z,samples[2*ss:3*ss], axis=0)
+        z1 = np.take(z, samples[0:ss], axis=0)
+        z2 = np.take(z, samples[ss:2*ss], axis=0)
+        z3 = np.take(z, samples[2*ss:3*ss], axis=0)
         return z1, z2, z3
     # Apply to input and output data
     x1, x2, x3 = split_sample(x, samples, ss)
     y1, y2, y3 = split_sample(y, samples, ss)
     return x1, x2, x3, y1, y2, y3
 
+
 def limitrain(x, y, Pout, rainonly=False, noshallow=False, verbose=True):
     indrain = np.greater(Pout, 0)
     if verbose:
-        print('There is some amount of rain %.1f%% of the time'
-          %(100.*np.sum(indrain)/len(indrain)))
-        print('There is a rate of >3 mm/day %.1f%% of the time'
-          %(100.*np.sum(np.greater(Pout, 3))/len(indrain)))
+        print('There is some amount of rain {:.1f}% of the time'.
+              format(100. * np.sum(indrain)/len(indrain)))
+        print('There is a rate of >3 mm/day {:.1f}% of the time'.
+              format(100. * np.sum(np.greater(Pout, 3))/len(indrain)))
     if rainonly:
-        x = x[indrain,:]
-        y = y[indrain,:]
+        x = x[indrain, :]
+        y = y[indrain, :]
         Pout = Pout[indrain]
         if verbose:
             print('Only looking at times it is raining!')
     if noshallow:
-        cv, _  = whenconvection(y, verbose=True)
+        cv, _ = whenconvection(y, verbose=True)
         indnosha = np.logical_or(Pout > 0, cv == 0)
-        x = x[indnosha,:]
-        y = y[indnosha,:]
+        x = x[indnosha, :]
+        y = y[indnosha, :]
         Pout = Pout[indnosha]
         if verbose:
             print('Excluding all shallow convective events...')
     return x, y, Pout
+
 
 def whenconvection(y, verbose=True):
     """Caluclate how often convection occurs...useful for classification
@@ -282,10 +308,13 @@ def whenconvection(y, verbose=True):
     cv = np.copy(cv_strength)
     cv[cv > 0] = 1
     if verbose:
-        print('There is convection %.1f%% of the time' %(100.*np.sum(cv)/len(cv)))
+        print('There is convection {:.1f}% of the time'.
+              format(100. * np.sum(cv)/len(cv)))
     return cv, cv_strength
 
-def write_netcdf_onelayer(mlp, x_pp, y_pp, filename='/Users/jgdwyer/neural_weights_v2.nc'):
+
+def write_netcdf_onelayer(mlp, x_pp, y_pp,
+                          filename='/Users/jgdwyer/neural_weights_v2.nc'):
     # Grab weights and input normalization
     w1 = mlp.get_parameters()[0].weights
     w2 = mlp.get_parameters()[1].weights
@@ -295,20 +324,29 @@ def write_netcdf_onelayer(mlp, x_pp, y_pp, filename='/Users/jgdwyer/neural_weigh
     xscale_stnd = x_pp.scale_
     yscale_absmax = y_pp.max_abs_
     # Write weights to file
-    ncfile = Dataset(filename,'w')
+    ncfile = Dataset(filename, 'w')
     # Write the dimensions
     ncfile.createDimension('N_in',     w1.shape[0])
     ncfile.createDimension('N_h1',     w1.shape[1])
     ncfile.createDimension('N_out',    w2.shape[1])
     # Create variable entries in the file
-    nc_w1 = ncfile.createVariable('w1',np.dtype('float64').char,('N_h1','N_in'    )) #Reverse dims
-    nc_w2 = ncfile.createVariable('w2',np.dtype('float64').char,('N_out','N_h1'     ))
-    nc_b1 = ncfile.createVariable('b1',np.dtype('float64').char,('N_h1'))
-    nc_b2 = ncfile.createVariable('b2',np.dtype('float64').char,('N_out'))
-    nc_xscale_mean = ncfile.createVariable('xscale_mean',np.dtype('float64').char,('N_in'))
-    nc_xscale_stnd = ncfile.createVariable('xscale_stnd',np.dtype('float64').char,('N_in'))
-    nc_yscale_absmax = ncfile.createVariable('yscale_absmax',np.dtype('float64').char,('N_out'))
-    # Write variables and close file - transpose because fortran reads it in "backwards"
+    nc_w1 = ncfile.createVariable('w1', np.dtype('float64').char,
+                                  ('N_h1', 'N_in'))  # Reverse dims
+    nc_w2 = ncfile.createVariable('w2', np.dtype('float64').char,
+                                  ('N_out', 'N_h1'))
+    nc_b1 = ncfile.createVariable('b1', np.dtype('float64').char,
+                                  ('N_h1'))
+    nc_b2 = ncfile.createVariable('b2', np.dtype('float64').char,
+                                  ('N_out'))
+    nc_xscale_mean = ncfile.createVariable('xscale_mean',
+                                           np.dtype('float64').char, ('N_in'))
+    nc_xscale_stnd = ncfile.createVariable('xscale_stnd',
+                                           np.dtype('float64').char, ('N_in'))
+    nc_yscale_absmax = ncfile.createVariable('yscale_absmax',
+                                             np.dtype('float64').char,
+                                             ('N_out'))
+    # Write variables and close file - transpose because fortran reads it in
+    # "backwards"
     nc_w1[:] = w1.T
     nc_w2[:] = w2.T
     nc_b1[:] = b1
@@ -318,57 +356,12 @@ def write_netcdf_onelayer(mlp, x_pp, y_pp, filename='/Users/jgdwyer/neural_weigh
     nc_yscale_absmax[:] = yscale_absmax
     ncfile.close()
 
-def write_netcdf_twolayer(mlp,method,filename):
-    ValueError('This function needs to be rewritten to export the scaling with the new system')
-    # Grab weights and input normalization
-    w1 = mlp.get_parameters()[0].weights
-    w2 = mlp.get_parameters()[1].weights
-    w3 = mlp.get_parameters()[2].weights
-    b1 = mlp.get_parameters()[0].biases
-    b2 = mlp.get_parameters()[1].biases
-    b3 = mlp.get_parameters()[2].biases
-
-    xscale_min = scaler_x.data_min_
-    xscale_max = scaler_x.data_max_
-    yscale_absmax = scaler_y.max_abs_
-
-    # Write weights to file
-    ncfile = Dataset(filename,'w')
-    # Write the dimensions
-    ncfile.createDimension('N_in',     w1.shape[0])
-    ncfile.createDimension('N_h1',     w1.shape[1])
-    ncfile.createDimension('N_h2',     w2.shape[1])
-    ncfile.createDimension('N_out',    w3.shape[1])
-
-    # Create variable entries in the file
-    nc_w1 = ncfile.createVariable('w1',np.dtype('float64').char,('N_h1','N_in'    )) #Reverse dims
-    nc_w2 = ncfile.createVariable('w2',np.dtype('float64').char,('N_h2','N_h1'     ))
-    nc_w3 = ncfile.createVariable('w3',np.dtype('float64').char,('N_out','N_h2'    ))
-    nc_b1 = ncfile.createVariable('b1',np.dtype('float64').char,('N_h1'))
-    nc_b2 = ncfile.createVariable('b2',np.dtype('float64').char,('N_h2'))
-    nc_b3 = ncfile.createVariable('b3',np.dtype('float64').char,('N_out'))
-    if method == 'regress':
-        nc_xscale_min = ncfile.createVariable('xscale_min',np.dtype('float64').char,('N_in'))
-        nc_xscale_max = ncfile.createVariable('xscale_max',np.dtype('float64').char,('N_in'))
-        nc_yscale_absmax = ncfile.createVariable('yscale_absmax',np.dtype('float64').char,('N_out'))
-    # Write variables and close file - transpose because fortran reads it in "backwards"
-    nc_w1[:] = w1.T
-    nc_w2[:] = w2.T
-    nc_w3[:] = w3.T
-    nc_b1[:] = b1
-    nc_b2[:] = b2
-    nc_b3[:] = b3
-    if method == 'regress':
-        nc_xscale_min[:] = xscale_min
-        nc_xscale_max[:] = xscale_max
-        nc_yscale_absmax[:] = yscale_absmax
-    ncfile.close()
 
 def avg_hem(data, lat, axis, split=False):
     """Averages the NH and SH data (or splits them into two data sets)"""
-    ixsh = np.where(lat<0)[0] # where returns a tuple
-    ixnh = np.where(lat>=0)[0]
-    if len(ixsh)==0:
+    ixsh = np.where(lat < 0)[0]  # where returns a tuple
+    ixnh = np.where(lat >= 0)[0]
+    if len(ixsh) == 0:
         print(lat)
         raise ValueError('Appears that lat does not have SH values')
     lathalf = lat[ixnh]
@@ -382,53 +375,61 @@ def avg_hem(data, lat, axis, split=False):
     else:
         return (nh + shrev) / 2., lathalf
 
-def load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, indlat, data_dir='./data/', minlev=0., rainonly=False):
-    """Returns N_samples x 2*N_lev array of true and predicted values at a given latitude"""
-    # Load data
-    x, y, cv, Pout, lat, lev, dlev, timestep = loaddata(data_dir + 'convection_50day.pkl', minlev,
-                                                           rainonly=rainonly ,all_lats=False,
-                                                           indlat=indlat, verbose=False)
 
+def load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, indlat, datafile, minlev=0.,
+                 rainonly=False):
+    """Returns N_samples x 2*N_lev array of true and predicted values
+       at a given latitude"""
+    # Load data
+    x, y, cv, Pout, lat, lev, dlev, timestep = \
+        loaddata(datafile, minlev, rainonly=rainonly, all_lats=False,
+                 indlat=indlat, verbose=False)
     # Calculate predicted output
     x = transform_data(x_ppi, x_pp, x)
     y_pred = r_mlp.predict(x)
     y_pred = inverse_transform_data(y_ppi, y_pp, y_pred)
     # Output true and predicted temperature and humidity tendencies
-    T = unpack(y,'T')
-    q = unpack(y,'q')
-    T_pred = unpack(y_pred,'T')
-    q_pred = unpack(y_pred,'q')
+    T = unpack(y, 'T')
+    q = unpack(y, 'q')
+    T_pred = unpack(y_pred, 'T')
+    q_pred = unpack(y_pred, 'q')
     return T, q, T_pred, q_pred
 
-def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev):
+
+def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev, datafile):
     # Initialize
-    Tmean = np.zeros((len(lat),len(lev)))
-    qmean = np.zeros((len(lat),len(lev)))
-    Tbias = np.zeros((len(lat),len(lev)))
-    qbias = np.zeros((len(lat),len(lev)))
-    rmseT = np.zeros((len(lat),len(lev)))
-    rmseq = np.zeros((len(lat),len(lev)))
-    rT    = np.zeros((len(lat),len(lev)))
-    rq    = np.zeros((len(lat),len(lev)))
-    rmseT_lat = np.zeros(len(lat))
-    rmseq_lat = np.zeros(len(lat))
+    Tmean = np.zeros((len(lat), len(lev)))
+    qmean = np.zeros((len(lat), len(lev)))
+    Tbias = np.zeros((len(lat), len(lev)))
+    qbias = np.zeros((len(lat), len(lev)))
+    rmseT = np.zeros((len(lat), len(lev)))
+    rmseq = np.zeros((len(lat), len(lev)))
+    rT = np.zeros((len(lat), len(lev)))
+    rq = np.zeros((len(lat), len(lev)))
     for i in range(len(lat)):
         print(i)
-        T_true, q_true, T_pred, q_pred = load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, i, minlev=np.min(lev))
+        T_true, q_true, T_pred, q_pred = \
+            load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, i, datafile,
+                         minlev=np.min(lev))
         # Get means of true output
-        Tmean[i,:] = np.mean(T_true,axis=0)
-        qmean[i,:] = np.mean(q_true,axis=0)
+        Tmean[i, :] = np.mean(T_true, axis=0)
+        qmean[i, :] = np.mean(q_true, axis=0)
         # Get bias from means
-        Tbias[i,:] = np.mean(T_pred,axis=0) - Tmean[i,:]
-        qbias[i,:] = np.mean(q_pred,axis=0) - qmean[i,:]
+        Tbias[i, :] = np.mean(T_pred, axis=0) - Tmean[i, :]
+        qbias[i, :] = np.mean(q_pred, axis=0) - qmean[i, :]
         # Get rmse
-        rmseT[i,:] = np.sqrt(metrics.mean_squared_error(T_true, T_pred, multioutput='raw_values'))
-        rmseq[i,:] = np.sqrt(metrics.mean_squared_error(q_true, q_pred, multioutput='raw_values'))
+        rmseT[i, :] = np.sqrt(
+            metrics.mean_squared_error(T_true, T_pred,
+                                       multioutput='raw_values'))
+        rmseq[i, :] = np.sqrt(
+            metrics.mean_squared_error(q_true, q_pred,
+                                       multioutput='raw_values'))
         # Get correlation coefficients
         for j in range(len(lev)):
-            rT[i,j], _ = scipy.stats.pearsonr(T_true[:,j], T_pred[:,j])
-            rq[i,j], _ = scipy.stats.pearsonr(q_true[:,j], q_pred[:,j])
+            rT[i, j], _ = scipy.stats.pearsonr(T_true[:, j], T_pred[:, j])
+            rq[i, j], _ = scipy.stats.pearsonr(q_true[:, j], q_pred[:, j])
     return Tmean.T, qmean.T, Tbias.T, qbias.T, rmseT.T, rmseq.T, rT.T, rq.T
+
 
 def get_levs(minlev):
     # Define half sigma levels for data
