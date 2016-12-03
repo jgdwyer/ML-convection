@@ -181,7 +181,7 @@ def init_pp(ppi, raw_data):
         pp = [preprocessing.RobustScaler(),  # for temperature
               preprocessing.RobustScaler()]  # and humidity
     elif ppi['name'] == 'SimpleY':
-        pp = [15., 10.]  # for temperature
+        pp = [10./1., 10./2.5]  # for temperature
     else:
         ValueError('Incorrect scaler name')
     # Initialize scalers with data
@@ -383,7 +383,7 @@ def load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, indlat, datafile, minlev=0.,
     # Load data
     x, y, cv, Pout, lat, lev, dlev, timestep = \
         loaddata(datafile, minlev, rainonly=rainonly, all_lats=False,
-                 indlat=indlat, verbose=False)
+                 indlat=indlat, verbose=False, N_trn_exs=2500)
     # Calculate predicted output
     x = transform_data(x_ppi, x_pp, x)
     y_pred = r_mlp.predict(x)
@@ -460,3 +460,57 @@ def get_levs(minlev):
     dlev = np.diff(half_lev)
     dlev = dlev[indlev]
     return lev, dlev, indlev
+
+
+def get_pred_true_from_mlp(r_str, minlev):
+    # Load model and preprocessors
+    mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, _ = \
+        pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+    # Load raw data from file
+    x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
+        loaddata('./data/conv_testing_v3.pkl', minlev=minlev,
+                 N_trn_exs=None)
+    # Scale true values
+    ytrue_scl = transform_data(y_ppi, y_pp, ytcv_unscl)
+    # Apply x preprocessing to scale x-data and predict output
+    x_scl = transform_data(x_ppi, x_pp, x_unscl)
+    ypred_scl = mlp.predict(x_scl)
+    return ypred_scl, ytrue_scl
+
+
+def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
+    """Calculates the mean squared error for scaled outputs and is taken over
+       all training examples and levels of T and q
+       Args:
+        y_pred (float: Nex x N_lev*2): Scaled predicted value of output
+        y_true (float Nex x N_lev*2): Scaled true value of output
+        relflag (bool): Divide by standard deviation for each var at each lev
+                        to somewhat account for difference in strength between
+                        convection-only and conv+cond predictions
+        minlev (float): Don't consider data above this level when calculating
+                        mse
+        lev (float: N_lev): Used for calculating minlev
+       Returns:
+        mse (float, scalar): Mean-Squared error """
+    # If requested cut off certain levels
+    if minlev is not None:
+        if lev is None:
+            raise ValueError('Also need to input levels!')
+        indlev = np.greater_equal(lev, minlev)
+        # For predicted data
+        Tp = unpack(y_pred, 'T')[:, indlev]
+        qp = unpack(y_pred, 'q')[:, indlev]
+        y_pred = pack(Tp, qp)
+        # For true data
+        Tt = unpack(y_true, 'T')[:, indlev]
+        qt = unpack(y_true, 'q')[:, indlev]
+        y_true = pack(Tt, qt)
+    # Calculate squared difference
+    mse = np.square(y_pred - y_true)
+    # If looking at relative mean squared error divide by the mean over all
+    # examples for each variable and at each level
+    if relflag:
+        mse = mse/np.abs(np.std(y_true, axis=1))[:, None]
+    # Now take mean value over flattened array for all values
+    mse = np.mean(mse[np.isfinite(mse)])
+    return mse
