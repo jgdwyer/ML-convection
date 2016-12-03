@@ -1,7 +1,5 @@
 import numpy as np
 import matplotlib
-matplotlib.use('Agg') # so figs just print to file
-matplotlib.rcParams['agg.path.chunksize'] = 10000
 import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import src.nnload as nnload
@@ -10,9 +8,11 @@ from sklearn import metrics, preprocessing
 import pickle
 import os
 unpack = nnload.unpack
+matplotlib.use('Agg')  # so figs just print to file
+matplotlib.rcParams['agg.path.chunksize'] = 10000
 
 # ---   META PLOTTING SCRIPTS  --- #
-#def plots_by_lat(pp_x, pp_y, r_mlp, lat):
+
 
 def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
                   rainonly=False):
@@ -483,27 +483,81 @@ def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
             f.savefig(filename, bbox_inches='tight', dpi=450)
             plt.close()
 
+
 def plot_model_error_over_time(errors, mlp_str, fig_dir):
     x = np.arange(errors.shape[0])
-    ytix = [.5e-3,1e-3,2e-3,5e-3,10e-3,20e-3]
+    ytix = [.5e-3, 1e-3, 2e-3, 5e-3, 10e-3, 20e-3, 50e-3, 100e-3]
     # Plot error rate vs. iteration number
     fig = plt.figure()
-    # Plot training errors
-    plt.semilogy(x, np.squeeze(errors[:,0]), alpha=0.5, color='blue',
-                 label='Training')
-    plt.semilogy(x, np.squeeze(errors[:,1]), alpha=0.5, color='blue')
+    # Plot training errors from cost function
+    plt.semilogy(x, np.squeeze(errors[:, 0]), alpha=0.5, color='blue',
+                 label='Training (cost function)')
+    plt.semilogy(x, np.squeeze(errors[:, 1]), alpha=0.5, color='blue')
     plt.yticks(ytix, ytix)
     plt.ylim((np.nanmin(errors), np.nanmax(errors)))
-    plt.semilogy(x, np.squeeze(errors[:,2]), alpha=0.5, color='green',
-                 label='Testing')
-    plt.semilogy(x, np.squeeze(errors[:,3]), alpha=0.5, color='green')
+    # Plot training errors that are not associated with cost function
+    plt.semilogy(x, np.squeeze(errors[:, 4]), alpha=0.5, color='red',
+                 label='Training')
+    plt.semilogy(x, np.squeeze(errors[:, 5]), alpha=0.5, color='red')
+    # Plot cross-validation errors
+    plt.semilogy(x, np.squeeze(errors[:, 2]), alpha=0.5, color='green',
+                 label='Cross-Val')
+    plt.semilogy(x, np.squeeze(errors[:, 3]), alpha=0.5, color='green')
     plt.legend()
     plt.title('Error for ' + mlp_str)
     plt.xlabel('Iteration Number')
     fig.savefig(fig_dir + 'error_history.png', bbox_inches='tight', dpi=450)
     plt.close()
 
+
 # ----  META-PLOTTING SCRIPTS  ---- #
+def meta_compare_error_rate_v2():
+    neur_str = ['10R', '50R', '100R', '10R_10R', '50R_50R', '100R_100R']
+    trn_ex = [1000, 5000, 10000, 100000]
+    e = dict()
+    tr = np.zeros((len(neur_str), len(trn_ex)))
+    cv = np.zeros((len(neur_str), len(trn_ex)))
+    mse = np.zeros((len(neur_str), len(trn_ex)))
+    ptf = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex'
+    for i, hid in enumerate(neur_str):
+        for j, nex in enumerate(trn_ex):
+            r_str = ptf + str(nex) + '_r_' + hid + \
+                '_mom0.9reg1e-05_Niter10000_v3'
+            _, _, err, _, _, _, _, _, _, _ = \
+                pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+            tr[i, j] = err[-1, 4]
+            cv[i, j] = err[-1, 2]
+            # yp, yt = nnload.get_pred_true_from_mlp(r_str, minlev=0.2)
+            # mse[i, j] = nnload.calc_mse_simple(yp, yt)
+    # Plot as a function of number of hidden neurons
+    plt.figure()
+    markers = ['o', 's', 'p', '*']
+    for i, mark in enumerate(markers):
+        plt.plot(tr[:, i], ls='-', marker=mark, color='blue',
+                 label='Train, N={:d}'.format(trn_ex[i]))
+    for i, mark in enumerate(markers):
+        plt.plot(cv[:, i], ls='-', marker=mark, color='green',
+                 label='Train, N={:d}'.format(trn_ex[i]))
+    plt.xticks(range(len(neur_str)), neur_str)
+    plt.legend()
+    plt.show()
+    # Plot as a function of number of training examples
+    fig, (ax1, ax2) = plt.subplots(1, 2)
+    colormat = plt.cm.plasma(np.linspace(0, 1, tr.shape[0]))
+    for i in range(tr.shape[0]):
+        ax1.semilogx(trn_ex, tr[i, :], marker='o', color=colormat[i, :],
+                     label=neur_str[i])
+        ax2.semilogx(trn_ex, cv[i, :], marker='o', color=colormat[i, :],
+                     label=neur_str[i])
+        ax2.legend()
+    plt.show()
+    # plt.figure()
+    # for i, mark in enumerate(markers):
+    #     plt.plot(mse[:, i], ls='-', marker=mark, color='blue',
+    #              label='mse, N={:d}'.format(trn_ex[i]))
+    # plt.show()
+
+
 def meta_compare_error_rate():
     hid_neur = [5,10,15,20,30,40,50,60,80,100,150]#,225,300] #,450,600]
     e = dict()
