@@ -1,7 +1,8 @@
 import numpy as np
-import sknn.mlp
+import sknn_jgd.mlp
 import time
-from sklearn import metrics, preprocessing
+from sklearn import metrics
+from sklearn.ensemble import RandomForestRegressor
 import src.nnload as nnload
 import pickle
 import src.nnplot as nnplot
@@ -12,7 +13,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                      n_iter=None, n_stable=None,
                      minlev=0.0, weight_precip=False, weight_shallow=False,
                      weight_decay=0.0, rainonly=False, noshallow=False,
-                     N_trn_exs=None, convcond=False):
+                     N_trn_exs=None, convcond=False, doRF=False):
     """Loads training data and trains and stores neural network
 
     Args:
@@ -30,7 +31,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         noshallow (bool): Don't train on shallow convective events
         N_trn_exs (int): Number of training examples to learn on
         convcond (bool): If true, learn to do convection + condensation
-
+        doRF (bool): Use a random forest rather than an ANN
     Returns:
         str: String id of trained NN
     """
@@ -78,21 +79,23 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         regularize = 'L2'
     else:
         regularize = None
-    # Build neural network
-    r_mlp, r_str = build_nn('regress', num_layers, 'Rectifier', hidneur,
-                            'momentum', pp_str, batch_size=100,
-                            n_stable=n_stable, n_iter=n_iter,
-                            learning_momentum=0.9, learning_rate=0.01,
-                            regularize=regularize, weight_decay=weight_decay)
+    if doRF:
+        r_mlp, r_str = build_randomforest(500, pp_str)
+        errors_stored = np.ones((1, 6))
+    else:
+        # Build neural network
+        r_mlp, r_str = build_nn('regress', num_layers, 'Rectifier', hidneur,
+                                'momentum', pp_str, batch_size=100,
+                                n_stable=n_stable, n_iter=n_iter,
+                                learning_momentum=0.9, learning_rate=0.01,
+                                regularize=regularize,
+                                weight_decay=weight_decay)
     if weight_precip:
         r_str = r_str + '_wpr'
     if weight_shallow:
         r_str = r_str + '_wsh'
-    # w1 "convection strength"
-    # w2 precip amount
-    # w3 precip amount*10
-    # w4 precip amount*100
     r_str = r_str + '_v3'  # reflects that we are loading v3 of training data
+    # Print details about the ML algorithm we are using
     print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' +
           str(x.shape[1]) + ' input features and ' + str(y.shape[1]) +
           ' output targets')
@@ -110,12 +113,14 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
 
 
 def store_stats(i, avg_train_error, best_train_error, avg_valid_error,
-                best_valid_error, **_):
+                best_valid_error, avg_train_obj_error, best_train_obj_error,
+                **_):
     if i == 1:
         global errors_stored
         errors_stored = []
-    errors_stored.append((avg_train_error, best_train_error, avg_valid_error,
-                          best_valid_error))
+    errors_stored.append((avg_train_error, best_train_error,
+                          avg_valid_error, best_valid_error,
+                          avg_train_obj_error, best_train_obj_error))
 
 
 def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
@@ -128,36 +133,37 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
     # First build layers
     actv_fnc = num_layers*[actv_fnc]
     hid_neur = num_layers*[hid_neur]
-    layers = [sknn.mlp.Layer(f, units=h) for f, h in zip(actv_fnc, hid_neur)]
+    layers = [sknn_jgd.mlp.Layer(f, units=h) for f, h in zip(actv_fnc, hid_neur)]
     # Append a linear output layer if regressing and a softmax layer if
     # classifying
     if method == 'regress':
-        layers.append(sknn.mlp.Layer("Linear"))
-        mlp = sknn.mlp.Regressor(layers,
-                                 n_iter=n_iter,
-                                 batch_size=batch_size,
-                                 learning_rule=learning_rule,
-                                 learning_rate=learning_rate,
-                                 learning_momentum=learning_momentum,
-                                 regularize=regularize,
-                                 weight_decay=weight_decay,
-                                 n_stable=n_stable,
-                                 valid_size=valid_size,
-                                 f_stable=f_stable,
-                                 callback={'on_epoch_finish': store_stats})
+        layers.append(sknn_jgd.mlp.Layer("Linear"))
+        mlp = sknn_jgd.mlp.Regressor(layers,
+                                     n_iter=n_iter,
+                                     batch_size=batch_size,
+                                     learning_rule=learning_rule,
+                                     learning_rate=learning_rate,
+                                     learning_momentum=learning_momentum,
+                                     regularize=regularize,
+                                     weight_decay=weight_decay,
+                                    n_stable=n_stable,
+                                    valid_size=valid_size,
+                                    f_stable=f_stable,
+                                    callback={'on_epoch_finish': store_stats})
     if method == 'classify':
         layers.append(sknn.mlp.Layer("Softmax"))
-        mlp = sknn.mlp.Classifier(layers,
-                                  n_iter=n_iter,
-                                  batch_size=batch_size,
-                                  learning_rule=learning_rule,
-                                  learning_rate=learning_rate,
-                                  learning_momentum=learning_momentum,
-                                  regularize=regularize,
-                                  weight_decay=weight_decay,
-                                  n_stable=n_stable,
-                                  valid_size=valid_size,
-                                  callback={'on_epoch_finish': store_stats})
+        mlp = sknn_jgd.mlp.Classifier(layers,
+                                      n_iter=n_iter,
+                                      batch_size=batch_size,
+                                      learning_rule=learning_rule,
+                                      learning_rate=learning_rate,
+                                      learning_momentum=learning_momentum,
+                                      regularize=regularize,
+                                      weight_decay=weight_decay,
+                                      n_stable=n_stable,
+                                      valid_size=valid_size,
+                                      callback={'on_epoch_finish':
+                                                store_stats})
     # Write nn string
     layerstr = '_'.join([str(h) + f[0] for h, f in zip(hid_neur, actv_fnc)])
     if learning_rule == 'momentum':
@@ -175,13 +181,9 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
     return mlp, mlp_str
 
 
-def build_randomforest(method, mlp, mlp_str):
-    methods = {'classify': RandomForestClassifier,
-               'regress': RandomForestRegressor}
-    estimators = {'classify': [200, 50, 20], 'regress': [200, 50, 20]}
-    for estimator in estimators[method]:
-        mlp.append(methods[method](n_estimators=estimator))
-        mlp_str.append(method[0] + '_RF_' + str(estimator))
+def build_randomforest(N_trees, mlp_str):
+    mlp = RandomForestRegressor(n_estimators=N_trees)
+    mlp_str = 'RF_regress_' + str(N_trees)
     return mlp, mlp_str
 
 
@@ -204,19 +206,10 @@ def train_nn(mlp, mlp_str, x, y, w=None):
 
 # ---  EVALUATING NEURAL NETS  --- #
 
-def calc_mse(y_pred, y_true):
-    """Calculates the mean squared error for scaled outputs and is taken over
-       all training examples and levels of T and q
-       Args:
-        y_pred (float: Nex x N_lev*2): Scaled predicted value of output
-        y_true (float Nex x N_lev*2): Scaled true value of output
-       Returns:
-        mse (float, scalar): Mean-Squared error """
-    mse = np.mean(np.square(y_pred - y_true))
-    return mse
 
 
-def compare_convcond_prediction(cv_str, cvcd_str):
+
+def compare_convcond_prediction(cv_str, cvcd_str, minlev):
     cv_mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, _ = \
         pickle.load(open('./data/regressors/' + cv_str + '.pkl', 'rb'))
     cvcd_mlp, _, errors, x_ppi_check, y_ppi_check, x_pp, y_pp, lat, lev, _ = \
@@ -227,10 +220,10 @@ def compare_convcond_prediction(cv_str, cvcd_str):
                          'conv+cond!')
     # Load data
     x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata('./data/conv_testing_v3.pkl', minlev=0.1,
+        nnload.loaddata('./data/conv_testing_v3.pkl', minlev=minlev,
                         N_trn_exs=10000, randseed=True)
     xcvcd_unscl, ytcvcd_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata('./data/convcond_testing_v3.pkl', minlev=0.1,
+        nnload.loaddata('./data/convcond_testing_v3.pkl', minlev=minlev,
                         N_trn_exs=10000, randseed=True)
     # Check that x values are the same to make sure random seeds are same
     if np.sum(np.abs(x_unscl - xcvcd_unscl)) > 0.0:
@@ -240,19 +233,16 @@ def compare_convcond_prediction(cv_str, cvcd_str):
     ytcvcd_scl = nnload.transform_data(y_ppi, y_pp, ytcvcd_unscl)
     # Derived true y-values for cond only
     ytcd_scl = ytcvcd_scl - ytcvcd_scl
-    # Apply x preprocessing to scale x-data
-    x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
+
     # Calculate predicted y values for conv and convcond
     ypcv_scl = cv_mlp.predict(x_scl)
     ypcvcd_scl = cvcd_mlp.predict(x_scl)
     # Add true cond values to ycv_true and ycv_pred
-    mse_cvcd_predictboth = calc_mse(ypcvcd_scl, ytcvcd_scl)
-    mse_cv = calc_mse(ypcv_scl, ytcv_scl)
-    mse_cvcd_predictone = calc_mse(ypcv_scl + ytcd_scl, ytcv_scl + ytcd_scl)
+    v = 'q'
+    mse_cvcd_predictboth = calc_mse(nnload.unpack(ypcvcd_scl, v), nnload.unpack(ytcvcd_scl, v), relflag=True)
+    mse_cv = calc_mse(nnload.unpack(ypcv_scl, v), nnload.unpack(ytcv_scl, v), relflag=True)
     print('MSE predicting convection and condensation in one step: {:.5f}'.
           format(mse_cvcd_predictboth))
-    print('MSE predicting convection and adding true condensation: {:.5f}'.
-          format(mse_cvcd_predictone))
     print('MSE predicting convection only (no condensation): {:.5f}'.
           format(mse_cv))
     # Calculate MSE for both types
@@ -347,17 +337,3 @@ def plot_classifier_metrics(mlp_list,mlp_str,X,y_true,auroc_score):
     do_plt(logloss,     3, 'Cross-entropy Loss'   , mlp_str)
     plt.show()
     fig.savefig(fig_dir + 'classify_metrics.png',bbox_inches='tight',dpi=450)
-
-def _build_classifiers(c_mlp,c_str,n_iter=10000):
-    # OUTDATED - NEEDS TO BE UPDATED OR REMOVED
-    """Returns a list of classifier MLP objects and a str with their abbreivated names"""
-    batch_size=100
-    c_mlp.append(build_nn('classify',['Rectifier','Rectifier']            ,[500,500]    ,n_iter,batch_size,'momentum'))
-    c_mlp.append(build_nn('classify',['Rectifier','Rectifier','Rectifier'],[200,200,200],n_iter,batch_size,'momentum'))
-    c_mlp.append(build_nn('classify',['Tanh','Tanh','Tanh']               ,[200,200,200],n_iter,batch_size,'momentum'))
-    c_mlp.append(build_nn('classify',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'momentum'))
-    c_mlp.append(build_nn('classify',['Tanh']                             ,[500]        ,n_iter,batch_size,'momentum'))
-    c_mlp.append(build_nn('classify',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'momentum',learning_momentum=0.7))
-    c_mlp.append(build_nn('classify',['Tanh','Tanh']                      ,[500,500]    ,n_iter,batch_size,'sgd'))
-    c_mlp,c_str = map(list, zip(*c_mlp))
-    return c_mlp, c_str
