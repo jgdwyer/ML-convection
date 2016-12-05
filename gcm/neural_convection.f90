@@ -74,18 +74,18 @@ contains
 !---------------------- local data -------------------------------------
 
    real,dimension(size(tin,1),size(tin,2))             :: precip
-   real,dimension(size(tin,3)/2)                         :: qpc, tpc
-   real,dimension(size(tin,3))                       :: features, targets
+   real,dimension(32/2)                         :: qpc, tpc
+   real,dimension(32)                       :: features, targets
    real                                                :: deltak, qnew_tmp
- integer  i, j, k, ix, jx, kx, ktop, kx2
+ integer  i, j, k, ix, jx, kx, ktop, kx2, kx2ind
 
-      real, intent(in), dimension(size(tin,3), 100)   :: r_w1 
-      real, intent(in), dimension(100)                :: r_b1 
-      real, intent(in), dimension(100, size(tin,3))   :: r_w2
-      real, intent(in), dimension(size(tin,3))        :: r_b2
-      real, intent(in), dimension(size(tin,3))        :: xscale_mean
-      real, intent(in), dimension(size(tin,3))        :: xscale_stnd
-      real, intent(in), dimension(size(tin,3))        :: yscale_absmax
+      real, intent(in), dimension(32, 100)   :: r_w1 
+      real, intent(in), dimension(100)       :: r_b1 
+      real, intent(in), dimension(100, 32)   :: r_w2
+      real, intent(in), dimension(32)        :: r_b2
+      real, intent(in), dimension(32)        :: xscale_mean
+      real, intent(in), dimension(32)        :: xscale_stnd
+      real, intent(in), dimension(32)        :: yscale_absmax
 
       real, dimension(100) :: z1, z2
 !     real, dimension(300) :: a1, a2
@@ -100,7 +100,8 @@ contains
       ix=size(tin,1)
       jx=size(tin,2)
       kx=size(tin,3)
-      kx2 = kx / 2
+      kx2 = size(r_b2)/2  ! Total number of levels the NN uses
+      kx2ind = kx - kx2 + 1  ! Index value to grab data for NN from full profile
        do i=1,ix
           do j=1,jx
 ! Initialize variables
@@ -116,12 +117,12 @@ contains
 !             prob = 0.
              targets = 0.
 ! Temperature and humidity profiles
-             tpc = tin(i,j,kx2:kx)
-             qpc = qin(i,j,kx2:kx)
+             tpc = tin(i,j,kx2ind:kx)
+             qpc = qin(i,j,kx2ind:kx)
 
 ! Combine tpc and rpc into a vector of levels (2*N_lev)
              features(1:kx2) = tpc
-             features(kx2+1:kx) = qpc
+             features(kx2+1:2*kx2) = qpc
 ! Scale inputs
 ! See http://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html#sklearn.preprocessing.MinMaxScaler.get_params for more info about scaling
 !             features = (features - xscale_min) / (xscale_max - xscale_min)
@@ -158,11 +159,15 @@ contains
 ! Inverse scale outputs
              targets = targets * yscale_absmax
 ! Separate out targets into heating and moistening tendencies
-             tdel(i,j,kx2:kx) = targets(1:kx2)
-             qdel(i,j,kx2:kx) = targets(kx2 + 1:kx)
+             tdel(i,j,kx2ind:kx) = targets(1:kx2)
+             qdel(i,j,kx2ind:kx) = targets(kx2 + 1:2*kx2)
 ! Correct units (nn trained on K/day and g/kg/day rather than K and kg/kg)
              tdel(i,j,:) = tdel(i,j,:) / 3600. / 24.
              qdel(i,j,:) = qdel(i,j,:) / 3600. / 24. / 1000.
+! Predicted temperature and humidity tendencies, but actually want the delta T and q
+! So multiply each by the time step
+             tdel(i,j,:) = tdel(i,j,:) * dt
+             qdel(i,j,:) = qdel(i,j,:) * dt
 ! If any humidities would become negative set them to zero (and recalc precip)
              do k=1, kx2
                  qnew_tmp = 0.0
