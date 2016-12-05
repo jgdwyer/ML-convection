@@ -3,5 +3,6 @@ __pycache__
 .ipynb_checkpoints
 figs
 data
+newdata
 assets
 *.pyc

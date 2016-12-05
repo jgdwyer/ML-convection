@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib
 import matplotlib.gridspec as gridspec
+matplotlib.use('Agg')  # so figs just print to file
 import matplotlib.pyplot as plt
 import src.nnload as nnload
 import scipy.stats
@@ -8,7 +9,6 @@ from sklearn import metrics, preprocessing
 import pickle
 import os
 unpack = nnload.unpack
-matplotlib.use('Agg')  # so figs just print to file
 matplotlib.rcParams['agg.path.chunksize'] = 10000
 
 # ---   META PLOTTING SCRIPTS  --- #

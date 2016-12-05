@@ -3,15 +3,15 @@ import src.nnplot as nnplot
 import src.nnload as nnload
 
 # Define preprocessor
-x_ppi={'name':'StandardScaler','method':'qTindividually'}
-y_ppi={'name':'SimpleY','method':'qTindividually'}
+x_ppi = {'name': 'StandardScaler', 'method': 'qTindividually'}
+y_ppi = {'name': 'SimpleY', 'method': 'qTindividually'}
 #y_ppi={'name':'MaxAbs','method':'qTindividually'}
 
 
-num_layers=[1, 2]
-num_neurons = [10, 50, 100]
+num_layers = [1, 2]
+num_neurons = [5]  # [10, 50, 100]
 num_trains = [1000, 5000, 10000, 100000]
-cvcdbool = [False, True]
+cvcdbool = [False]  # , True]
 regs = [1e-5, 1e-6]
 
 for cvcd in cvcdbool:
