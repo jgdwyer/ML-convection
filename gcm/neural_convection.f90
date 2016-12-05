@@ -163,8 +163,6 @@ contains
 ! Correct units (nn trained on K/day and g/kg/day rather than K and kg/kg)
              tdel(i,j,:) = tdel(i,j,:) / 3600. / 24.
              qdel(i,j,:) = qdel(i,j,:) / 3600. / 24. / 1000.
-             tdel(i,j,:) = tdel(i,j,:) * dt
-             qdel(i,j,:) = qdel(i,j,:) * dt
 ! If any humidities would become negative set them to zero (and recalc precip)
              do k=1, kx2
                  qnew_tmp = 0.0
