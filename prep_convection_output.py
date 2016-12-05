@@ -13,7 +13,7 @@ import pickle
 
 
 time_beg = 1025
-time_end = 2000
+time_end = 4000
 time_stp = 25
 file_days = np.arange(time_beg, time_end, time_stp)
 N_files = np.size(file_days)
@@ -118,8 +118,10 @@ Pout_all = Pout_all * 3600 * 24
 N_trn_exs = Tin.shape[2]
 randinds = np.random.permutation(N_trn_exs)
 i70 = int(0.7*np.size(randinds))
+i90 = int(0.9*np.size(randinds))
 randind_trn = randinds[:i70]
-randind_tst = randinds[i70:]
+randind_tst = randinds[i70:i90]
+randind_vld = randinds[i90:]
 # Store the data in files
 # For convection-only learning
 pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
@@ -128,6 +130,10 @@ pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
 pickle.dump([Tin[:, :, randind_tst], qin[:, :, randind_tst],
              Tout[:, :, randind_tst], qout[:, :, randind_tst],
              Pout[:, randind_tst], lat], open('./conv_testing_v3.pkl', 'wb'))
+pickle.dump([Tin[:, :, randind_vld], qin[:, :, randind_vld],
+             Tout[:, :, randind_vld], qout[:, :, randind_vld],
+             Pout[:, randind_vld], lat],
+            open('./conv_validation_v3.pkl', 'wb'))
 # For convection + condensation learning
 pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
              Tout_all[:, :, randind_trn], qout_all[:, :, randind_trn],
@@ -137,3 +143,7 @@ pickle.dump([Tin[:, :, randind_tst], qin[:, :, randind_tst],
              Tout_all[:, :, randind_tst], qout_all[:, :, randind_tst],
              Pout_all[:, randind_tst], lat],
             open('./convcond_testing_v3.pkl', 'wb'))
+pickle.dump([Tin[:, :, randind_vld], qin[:, :, randind_vld],
+             Tout_all[:, :, randind_vld], qout_all[:, :, randind_vld],
+             Pout_all[:, randind_vld], lat],
+            open('./convcond_validation_v3.pkl', 'wb'))
