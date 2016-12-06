@@ -13,7 +13,8 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                      n_iter=None, n_stable=None,
                      minlev=0.0, weight_precip=False, weight_shallow=False,
                      weight_decay=0.0, rainonly=False, noshallow=False,
-                     N_trn_exs=None, convcond=False, doRF=False):
+                     N_trn_exs=None, convcond=False, doRF=False,
+                     cirrusflag=False):
     """Loads training data and trains and stores neural network
 
     Args:
@@ -32,17 +33,22 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         N_trn_exs (int): Number of training examples to learn on
         convcond (bool): If true, learn to do convection + condensation
         doRF (bool): Use a random forest rather than an ANN
+        cirrusflag (bool): Run on the cirrus machine
     Returns:
         str: String id of trained NN
     """
     # Load training data
+    if cirrusflag:
+        datadir = '/disk7/jgdwyer/chickpea/nndata/'
+    else:
+        datadir = './data/'
     if convcond:
-        trainfile = './data/convcond_training_v3.pkl'
-        testfile = './data/convcond_testing_v3.pkl'
+        trainfile = datadir + 'convcond_training_v3.pkl'
+        testfile = datadir + 'convcond_testing_v3.pkl'
         pp_str = 'convcond_'
     else:
-        trainfile = './data/conv_training_v3.pkl'
-        testfile = './data/conv_testing_v3.pkl'
+        trainfile = datadir + 'conv_training_v3.pkl'
+        testfile = datadir + 'conv_testing_v3.pkl'
         pp_str = ''
     x, y, cv, Pout, lat, lev, dlev, timestep = \
         nnload.loaddata(trainfile, minlev, rainonly=rainonly,
@@ -107,8 +113,8 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     # Plot figures with validation data (and with training data)
     nnplot.plot_all_figs(r_str, datasource=testfile, noshallow=noshallow,
                          rainonly=rainonly)
-    nnplot.plot_all_figs(r_str, datasource=trainfile, validation=False,
-                         noshallow=noshallow, rainonly=rainonly)
+    # nnplot.plot_all_figs(r_str, datasource=trainfile, validation=False,
+    #                      noshallow=noshallow, rainonly=rainonly)
     return r_str
 
 
