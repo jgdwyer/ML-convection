@@ -169,12 +169,12 @@ contains
              tdel(i,j,:) = tdel(i,j,:) * dt
              qdel(i,j,:) = qdel(i,j,:) * dt
 ! If any humidities would become negative set them to zero (and recalc precip)
-             do k=1, kx2
+             do k=1, kx
                  qnew_tmp = 0.0
-                 qnew_tmp = qpc(k) + qdel(i,j,kx2 + k)
+                 qnew_tmp = qpc(k) + qdel(i,j,k)
                  if ( qnew_tmp .lt. 0.0 ) then
                      ! Dry out level, but don't let it go negative
-                     qdel(i,j,kx2 + k) = -qpc(k)
+                     qdel(i,j,k) = -qpc(k)
                  endif
              end do
 
