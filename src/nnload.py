@@ -313,8 +313,8 @@ def whenconvection(y, verbose=True):
     return cv, cv_strength
 
 
-def write_netcdf_onelayer(mlp, x_pp, y_pp,
-                          filename='/Users/jgdwyer/neural_weights_v2.nc'):
+def write_netcdf_onelayer(mlp, mlp_str, x_pp, y_pp,
+                          filename='/Users/jgdwyer/neural_weights_v3.nc'):
     # Grab weights and input normalization
     w1 = mlp.get_parameters()[0].weights
     w2 = mlp.get_parameters()[1].weights
@@ -322,7 +322,10 @@ def write_netcdf_onelayer(mlp, x_pp, y_pp,
     b2 = mlp.get_parameters()[1].biases
     xscale_mean = x_pp.mean_
     xscale_stnd = x_pp.scale_
-    yscale_absmax = y_pp.max_abs_
+    Nlev = int(np.shape(b2)[0]/2)
+    yscale_absmax = np.zeros(b2.shape)
+    yscale_absmax[:Nlev] = y_pp[0]
+    yscale_absmax[Nlev:] = y_pp[1]
     # Write weights to file
     ncfile = Dataset(filename, 'w')
     # Write the dimensions
@@ -354,6 +357,8 @@ def write_netcdf_onelayer(mlp, x_pp, y_pp,
     nc_xscale_mean[:] = xscale_mean
     nc_xscale_stnd[:] = xscale_stnd
     nc_yscale_absmax[:] = yscale_absmax
+    # Write global file attributes
+    ncfile.description = mlp_str
     ncfile.close()
 
 
