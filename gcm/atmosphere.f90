@@ -311,14 +311,14 @@ call spectral_dynamics_init(Time, Time_step, previous, current, ug, vg, tg, psg,
 call get_grid_domain(is, ie, js, je)
 call get_num_levels(num_levels)
 
-allocate (r_w1(1:num_levels, 1:100))
-allocate (r_w2(1:100,          1:num_levels))
+allocate (r_w1(1:32, 1:100))
+allocate (r_w2(1:100,          1:32))
 allocate (r_b1(1:100))
-allocate (r_b2(1:num_levels))
+allocate (r_b2(1:32))
 
-allocate (xscale_mean(1:num_levels))
-allocate (xscale_stnd(1:num_levels))
-allocate (yscale_absmax(1:num_levels))
+allocate (xscale_mean(1:32))
+allocate (xscale_stnd(1:32))
+allocate (yscale_absmax(1:32))
 
 allocate (dt_psg     (is:ie, js:je))
 allocate (dt_ug      (is:ie, js:je, num_levels))
@@ -471,9 +471,9 @@ end if
 ! end POG addition
 
 
-id_t_intermed = register_diag_field(mod_name, 'tg_before_convection',        &
+id_t_intermed = register_diag_field(mod_name, 't_intermed',        &
      axes(1:3), Time, 'Temperature before convection called','K')
-id_q_intermed = register_diag_field(mod_name, 'qg_before_convection',        &
+id_q_intermed = register_diag_field(mod_name, 'q_intermed',        &
      axes(1:3), Time, 'Humidity before convection called','kg/kg')
 
 if(ldry_convection) call dry_convection_init(get_axis_id(), Time)
