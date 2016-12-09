@@ -313,8 +313,21 @@ def whenconvection(y, verbose=True):
     return cv, cv_strength
 
 
-def write_netcdf_onelayer(mlp, mlp_str, x_pp, y_pp,
-                          filename='/Users/jgdwyer/neural_weights_v3.nc'):
+def write_netcdf_v4():
+    mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
+        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
+    datasource = './data/conv_training_v3.pkl'
+    # Set output filename
+    filename = '/Users/jgdwyer/neural_weights_v4.nc'
+    # Load ANN and preprocessors
+    mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
+        pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
+    # Need to transform some data for preprocessors to be able to export params
+    x_unscl, y_unscl, _, _, _, _, _, _ = loaddata(datasource, minlev=min(lev))
+    x_scl = transform_data(x_ppi, x_pp, x_unscl)
+    y_scl = transform_data(y_ppi, y_pp, y_unscl)
+    # Also need to use the predict method to be able to export ANN params
+    _ = mlp.predict(x_scl)
     # Grab weights and input normalization
     w1 = mlp.get_parameters()[0].weights
     w2 = mlp.get_parameters()[1].weights
@@ -322,16 +335,16 @@ def write_netcdf_onelayer(mlp, mlp_str, x_pp, y_pp,
     b2 = mlp.get_parameters()[1].biases
     xscale_mean = x_pp.mean_
     xscale_stnd = x_pp.scale_
-    Nlev = int(np.shape(b2)[0]/2)
+    Nlev = len(lev)
     yscale_absmax = np.zeros(b2.shape)
     yscale_absmax[:Nlev] = y_pp[0]
     yscale_absmax[Nlev:] = y_pp[1]
     # Write weights to file
     ncfile = Dataset(filename, 'w')
     # Write the dimensions
-    ncfile.createDimension('N_in',     w1.shape[0])
-    ncfile.createDimension('N_h1',     w1.shape[1])
-    ncfile.createDimension('N_out',    w2.shape[1])
+    ncfile.createDimension('N_in', w1.shape[0])
+    ncfile.createDimension('N_h1', w1.shape[1])
+    ncfile.createDimension('N_out', w2.shape[1])
     # Create variable entries in the file
     nc_w1 = ncfile.createVariable('w1', np.dtype('float64').char,
                                   ('N_h1', 'N_in'))  # Reverse dims
@@ -519,3 +532,55 @@ def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
     # Now take mean value over flattened array for all values
     mse = np.mean(mse[np.isfinite(mse)])
     return mse
+
+def test_neural_fortran(ind):
+    mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
+        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
+    mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
+        pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
+    datasource = './data/neural_del1.2_abs1.0_T42_v4check_conv_testing_v3.pkl'
+    x_unscl, ytrue_unscl, _, _, _, _, _, _ = loaddata(datasource, minlev=min(lev),
+                                                      randseed=True)
+    x_scl = transform_data(x_ppi, x_pp, x_unscl)
+    ypred_scl = mlp.predict(x_scl)
+    ypred_unscl = inverse_transform_data(y_ppi, y_pp, ypred_scl)
+    import matplotlib.pyplot as plt
+
+    import src.nnplot as nnplot
+    Ptrue = nnplot.calc_precip(ytrue_unscl, dlev)
+    Ppred = nnplot.calc_precip(ypred_unscl, dlev)
+    # f,(a1,a2) = plt.subplots(1,2)
+    # a1.plot(unpack(x_unscl,'T')[ind,:].T,lev,label='input T [K]')
+    # a2.plot(unpack(x_unscl,'q')[ind,:].T,lev,label='input q [kg/kg]')
+    plt.figure()
+    print(unpack(ytrue_unscl,'T')[ind,:].T)
+    print(unpack(ytrue_unscl,'q')[ind,:].T)
+    plt.plot(unpack(ytrue_unscl,'T')[ind,:].T,lev,label='GCM dT')
+    plt.plot(unpack(ypred_unscl,'T')[ind,:],lev,label='pred dT')
+    plt.xlabel('K/day')
+    plt.legend()
+    plt.figure()
+    plt.plot(unpack(ytrue_unscl,'q')[ind,:],lev,label='GCM dq')
+    plt.plot(unpack(ypred_unscl,'q')[ind,:],lev,label='pred dq')
+    plt.xlabel('g/kg/day')
+    plt.legend()
+    plt.figure()
+    q0 = unpack(x_unscl,'q')[ind,:]*1000  # g/kg
+    dq = 20.*60.*unpack(ypred_unscl,'q')[ind,:]/3600./24.  # g/kg/day -> g/kg
+    plt.plot(q0,lev,label='q before')
+    plt.plot(q0+dq,lev,label='q after')
+    plt.xlabel('g/kg')
+    plt.legend()
+    print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
+    print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
+    xtoa, ytoa, _, _, _, _, _, _ = loaddata(datasource, minlev=0.,randseed=True)
+    print(sum(unpack(x_unscl,'q')<0.))
+    print(Ppred.shape)
+    # plt.figure()
+    # plt.scatter(ypred_unscl[:,10], ytrue_unscl[:,10])
+    # plt.savefig('/Users/jgdwyer/Desktop/foo.png')
+    # plt.figure()
+    # plt.plot(np.sort(ytrue_unscl[:,30] - ypred_unscl[:,30]))
+    # print(np.sum(np.abs(ytrue_unscl - ypred_unscl)))
+    # print(ytrue_unscl == ypred_unscl)
+    # print(ytrue_unscl.shape)
