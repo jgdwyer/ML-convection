@@ -375,6 +375,36 @@ def write_netcdf_v4():
     ncfile.close()
 
 
+def verify_netcdf_weights():
+    # Load unscaled data
+    x, y, cv, Pout, lat, lev, dlev, timestep = \
+        loaddata('./data/conv_testing_v3.pkl',
+                 0.2, all_lats=True, indlat=None, rainonly=False)
+    # Load preprocessers
+    r_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' +\
+        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
+    r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat2, lev2, dlev = \
+        pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+    # Load netcdf files
+    ncfile = Dataset('/Users/jgdwyer/neural_weights_v4.nc', 'r')
+    yscale_absmax = ncfile['yscale_absmax'][:]
+    yscale_absmax = yscale_absmax[:, None].T
+    xscale_mean = ncfile['xscale_mean'][:]
+    xscale_mean = xscale_mean[:, None].T
+    xscale_std = ncfile['xscale_stnd'][:]
+    xscale_std = xscale_std[:, None].T
+    # Scaled variables as calculated by NN weights
+    xs = transform_data(x_ppi, x_pp, x)
+    ys = transform_data(y_ppi, y_pp, y)
+    # Scaled variables as calculated by hand from netcdf files
+    xs_byhand = (x - xscale_mean)/xscale_std
+    ys_byhand = y/yscale_absmax
+    print('Difference between x-scaling methods: {:.1f}'.
+          format(np.sum(np.abs(xs - xs_byhand))))
+    print('Difference between y-scaling methods: {:.1f}'.
+          format(np.sum(np.abs(ys - ys_byhand))))
+
+
 def avg_hem(data, lat, axis, split=False):
     """Averages the NH and SH data (or splits them into two data sets)"""
     ixsh = np.where(lat < 0)[0]  # where returns a tuple
