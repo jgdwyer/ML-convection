@@ -7,10 +7,12 @@ x_ppi = {'name': 'StandardScaler', 'method': 'qTindividually'}
 y_ppi = {'name': 'SimpleY', 'method': 'qTindividually'}
 
 num_layers = [1, 2]
-num_neurons = [100, 50, 10, 5, 200]  # [10, 50, 100]
+num_neurons = [100, 50, 10]  # [10, 50, 100]
 num_trains = [400000]  # [1000, 5000, 10000, 100000]
 cvcdbool = [False]  # , True]
-regs = [1e-6]  # 1e-5
+regs = [1e-7]  # 1e-5 1e-6
+
+# Run an example with many neurons in first layer, but not many in second layer
 
 for cvcd in cvcdbool:
     for reg in regs:
