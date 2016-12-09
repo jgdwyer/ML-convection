@@ -100,13 +100,14 @@ logical :: ldry_convection = .false.
 logical :: do_virtual = .false. ! whether virtual temp used in gcm_vert_diff
 logical :: lwet_convection = .false.
 logical :: neural_convection_flag = .false.
+logical :: neural_convcond_flag = .false.
 logical :: two_stream = .true.
 logical :: mixed_layer_bc = .false.
 real :: roughness_heat = 0.05
 real :: roughness_moist = 0.05
 real :: roughness_mom = 0.05
 
-namelist/atmosphere_nml/ turb, ldry_convection, lwet_convection, neural_convection_flag, roughness_heat, two_stream, mixed_layer_bc, roughness_moist, roughness_mom, do_virtual
+namelist/atmosphere_nml/ turb, ldry_convection, lwet_convection, neural_convection_flag, neural_convcond_flag, roughness_heat, two_stream, mixed_layer_bc, roughness_moist, roughness_mom, do_virtual
 
 ! end CW addition
 
@@ -183,7 +184,6 @@ real, allocatable, dimension(:,:,:) ::                                        &
      cond_dt_qg,           &   ! moisture tendency from condensation
      t_intermed,           &   ! temperature before convection
      q_intermed               ! humidity before convection
-!     dt_tg_spectraldamping     ! temperautre tendency from spectral damping (JGD
 
 logical, allocatable, dimension(:,:) ::                                       &
      avail,                &   ! generate surf. flux (all true)
@@ -229,15 +229,7 @@ integer ::                                                                    &
      id_dt_tg_spectraldamping, & ! temperautre tendency from spectral damping (JGD)
      id_dt_tg_corrections, & ! temperautre tendency from energy corrections (JGD)
      id_dt_vorg_spectraldamping ! vorticity tendency from spectral damping (JGD)
-!     id_r_w1,        &   ! for bug testing
-!     id_r_b1,        &   ! for bug testing
-!     id_r_w2,  &
-!     id_r_w3, &
-!     id_r_b2, &
-!     id_r_b3, &
-!     id_x1, &
-!     id_x2, &
-!     id_y1, &
+
 logical :: used
 integer, dimension(4) :: axes
 
@@ -521,22 +513,6 @@ if(neural_convection_flag) then
         axes(1:2), Time, 'Rain from convection','kg/m/m/s')                                      
    id_conv_raindebug = register_diag_field(mod_name, 'convection_raindebug',            &                  
         axes(1:2), Time, 'Rain from convection debug','kg/m/m/s')                                      
-!   id_r_w1 = register_static_field(mod_name, 'r_w1', axes(5:6), 'r_w1','r_w1')                   
-!   id_r_b1 = register_static_field(mod_name, 'r_b1', (/axes(6)/),
-!   'r_b1','r_b1')                 
-!   id_r_w2 = register_static_field(mod_name, 'r_w2', axes(6:7),  'r_w2','r_w2')                  
-!   id_r_b2 = register_static_field(mod_name, 'r_b2', (/axes(6)/),
-!   'r_b2','r_b2')                
-!   id_r_w3 = register_static_field(mod_name, 'r_w3', (/axes(6), axes(5)/),
-!   'r_w3','r_w3')       
-!   id_r_b3 = register_static_field(mod_name, 'r_b3', (/axes(5)/),
-!   'r_b3','r_b3')                
-!   id_x1 = register_static_field(mod_name, 'xscale_min', (/axes(5)/),  &                         
-!                                              'xscale_min','xscale_min')                         
-!   id_x2 = register_static_field(mod_name, 'xscale_max', (/axes(5)/),  &                         
-!                                              'xscale_max','xscale_max')                         
-!   id_y1 = register_static_field(mod_name, 'yscale_absmax', (/axes(5)/), &                       
-!                                        'yscale_absmax','yscale_absmax')                         
 endif 
 
 
@@ -651,7 +627,7 @@ if (lwet_convection) then
           
 endif
 
-if (neural_convection_flag) then
+if (neural_convection_flag .or. neural_convcond_flag) then
    rain = 0.0; snow = 0.0
    raindebug = 0.0
    call neural_convection (                            delta_t,   tg(:,:,:,previous),        &
@@ -663,19 +639,8 @@ if (neural_convection_flag) then
 
 endif
 
-!(neural_convection_flag) then
-!   if(id_r_w1 > 0) used = send_data(id_r_w1, r_w1, Time)
-!   if(id_r_b1 > 0) used = send_data(id_r_b1, r_b1, Time)                                         
-!   if(id_r_w2 > 0) used = send_data(id_r_w2, r_w2, Time)                                         
-!   if(id_r_b2 > 0) used = send_data(id_r_b2, r_b2, Time)                                         
-!   if(id_r_w3 > 0) used = send_data(id_r_w3, r_w3, Time)                                         
-!   if(id_r_b3 > 0) used = send_data(id_r_b3, r_b3, Time)                                         
-!   if(id_x1 > 0) used = send_data(id_x1, xscale_min, Time)                                       
-!   if(id_x2 > 0) used = send_data(id_x2, xscale_max, Time)                                       
-!   if(id_y1 > 0) used = send_data(id_y1, yscale_absmax, Time)                                    
-!endif                                                                                            
                                                                                                   
-if (lwet_convection .or. neural_convection_flag) then 
+if (lwet_convection .or. neural_convection_flag. or. neural_convcond_flag) then 
    tg_tmp = conv_dt_tg + tg(:,:,:,previous)
    qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nhum)
                                                                                                      
@@ -701,20 +666,22 @@ else
 
 endif
 
-rain = 0.0
-call lscale_cond (         tg_tmp,                          qg_tmp,        &
-                           p_full,                          p_half,        &
-                            coldT,                            rain,        &
-                             snow,                      cond_dt_tg,        &
-                       cond_dt_qg )
+if (.not. neural_convcond_flag) then
+   rain = 0.0
+   call lscale_cond (         tg_tmp,                          qg_tmp,        &
+                              p_full,                          p_half,        &
+                               coldT,                            rain,        &
+                                snow,                      cond_dt_tg,        &
+                          cond_dt_qg )
                                                                                                   
-cond_dt_tg = cond_dt_tg/delta_t
-cond_dt_qg = cond_dt_qg/delta_t
-rain       = rain/delta_t
+   cond_dt_tg = cond_dt_tg/delta_t
+   cond_dt_qg = cond_dt_qg/delta_t
+   rain       = rain/delta_t
                                                                                                   
-dt_tg = dt_tg + cond_dt_tg
-dt_tracers(:,:,:,nhum) = dt_tracers(:,:,:,nhum) + cond_dt_qg
-                                                                                                  
+   dt_tg = dt_tg + cond_dt_tg
+   dt_tracers(:,:,:,nhum) = dt_tracers(:,:,:,nhum) + cond_dt_qg
+endif 
+                                                                                               
 if(id_cond_dt_qg > 0) used = send_data(id_cond_dt_qg, cond_dt_qg, Time)
 if(id_cond_dt_tg > 0) used = send_data(id_cond_dt_tg, cond_dt_tg, Time)
 if(id_cond_rain > 0) used = send_data(id_cond_rain, rain, Time)

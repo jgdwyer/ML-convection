@@ -88,9 +88,6 @@ contains
       real, intent(in), dimension(32)        :: yscale_absmax
 
       real, dimension(100) :: z1, z2
-!     real, dimension(300) :: a1, a2
-!      real, dimension(2)   :: softmax
-!      real                 :: prob
 !-----------------------------------------------------------------------
 !     computation of precipitation by betts-miller scheme
 !-----------------------------------------------------------------------
@@ -107,16 +104,12 @@ contains
              precip(i,j) = 0.
              precipdebug(i,j) = 0.
              features = 0.
-!             a1 = 0.
-!             a2 = 0.
              qpc = 0.
              tpc = 0.
              z1 = 0.
              z2 = 0.
              tdel(i,j,:) = 0.
              qdel(i,j,:) = 0.
-!             softmax = 0.
-!             prob = 0.
              targets = 0.
 ! Temperature and humidity profiles
              tpc = tin(i,j,kx2ind:kx)
@@ -127,29 +120,7 @@ contains
              features(kx2+1:2*kx2) = qpc
 ! Scale inputs
 ! See http://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.MinMaxScaler.html#sklearn.preprocessing.MinMaxScaler.get_params for more info about scaling
-!             features = (features - xscale_min) / (xscale_max - xscale_min)
-!             features = features * 2.0 - 1.0 
              features = (features - xscale_mean) / xscale_stnd
-
-! Classify data
-!             a1 = matmul(features,  c_w1) + c_b1 
-!             where (a1 .lt. 0.0)  a1 = 0.0
-!             a2 = matmul(a1      ,  c_w2) + c_b2
-!             where (a2 .lt. 0.0)  a2 = 0.0
-!             softmax = matmul(a2,   c_w3) + c_b3
-! Use exponentials to calculate the probabilities via the softmax function
-!             softmax = exp(softmax)
-!             prob = softmax(1) / ( softmax(1) + softmax(2) )
-! If classifier says convection is occurring, run model with regressor
-!            if (prob .gt. 0.5) then
-!                 z1 = matmul(features,  r_w1) + r_b1
-!                 where (z1 .lt. 0.0)  z1 = 0.0
-!                 z2 = matmul(z1,        r_w2) + r_b2
-!                 where (z2 .lt. 0.0)  z2 = 0.0
-!                 targets = matmul(z2, r_w3) + r_b3
-!             else
-!                 targets = 0.
-!             endif
 
 ! Apply trained regressor network to data using rectifier activation function
 ! forward prop to hidden layer
@@ -174,13 +145,8 @@ contains
              do k=1, kx
                  if ( qin(i,j,k) + qdel(i,j,k) .lt. 0.0 ) then
                      ! Dry out level, but don't let it go negative
-!                     write(*,*) 'Level, qpc, qdel <0.'
-!                     write(*,*) k
-!                     write(*,*) qpc(k)
-!                     write(*,*) qdel(i,j,k)
                      qdeldebug(i,j,k) = qdel(i,j,k)
                      qdel(i,j,k) = -qin(i,j,k)
-!                     write(*,*) 'fin'
                  endif
              end do
 
@@ -188,39 +154,14 @@ contains
              do k=1, kx
                  precip(i,j) = precip(i,j) - qdel(i,j,k)*(phalf(i,j,k+1)- &
                             phalf(i,j,k))/grav
-             !    write(*,*) k
-             !    write(*,*) qdel(i,j,k)
-             !    write(*,*) qpc(k)
              end do
-             !write(*, *) 'end profile'
-             !write(*, *) precip(i,j)
 ! If precipitation is negative, just set outputs to zero!
              if ( precip(i,j) .lt. 0.0 ) then 
-!                 write(*,*) 'precip <0 for (P, i, j)'
-!                 write(*,*) precip(i,j)
-!                 write(*,*) i
-!                 write(*,*) j
                  precipdebug(i,j) = precip(i,j)
                  precip(i,j) = 0.0
                  tdel(i,j,:) = 0.0
                  qdel(i,j,:) = 0.0
              endif
-
-! Shift the temperature uniformly in the profile
-!                         deltak = 0.
-!                         do k=klzb, kx
-! Calculate the integrated difference in energy change within each level.
-!                            deltak = deltak - (tdel(i,j,k) + hlv/cp_air*&
-!                                     qdel(i,j,k))* &
-!                                     (phalf(i,j,k+1) - phalf(i,j,k))
-!                         end do
-! Divide by total pressure.
-!                         deltak = deltak/(phalf(i,j,kx+1) - phalf(i,j,klzb))
-! Adjust the reference profile (uniformly with height), and correspondingly 
-! the temperature change.
-!                         tdel(i,j,klzb:kx) = tdel(i,j,klzb:kx) + deltak
-
-
           end do
        end do
 
