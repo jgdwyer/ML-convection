@@ -11,19 +11,21 @@ import pickle
 # over a 1000 day period. N_lon_samp represents different longitudes we look at
 # for a give longitude and time snapshot
 
+runname = 'neural_del1.2_abs1.0_T42_v4check'
 
-time_beg = 1025
-time_end = 4000
+time_beg = 2025  # 1025
+time_end = 2500  # 4000
 time_stp = 25
-file_days = np.arange(time_beg, time_end, time_stp)
+file_days = np.arange(time_beg, time_end, time_stp)  # file_days = [1010]
 N_files = np.size(file_days)
 
-# Hardcoded N_lev (N_lev) and N_lat (64) here
+# Hardcoded values here
 N_lev = 30
 N_lat = 64
 N_lon = 128
 N_lon_samp = 5  # These are the number of samples (lon x time pairs) to take
 
+# Initialize
 Tin = np.zeros((time_stp, N_lev, N_lat, N_lon_samp, N_files))
 qin = np.zeros((time_stp, N_lev, N_lat, N_lon_samp, N_files))
 Tout = np.zeros((time_stp, N_lev, N_lat, N_lon_samp, N_files))
@@ -45,15 +47,15 @@ for i, file_day in enumerate(file_days):
     zPout_all = np.zeros((time_stp, N_lat, N_lon))
     # Set filename
     filename = '/glade/u/home/jdwyer/scratch/fms_output/' + \
-        'del1.2_abs1.0_T42/history/day' + \
+        runname + '/history/day' + \
         str(file_day).zfill(4) + 'h00/day' + \
         str(file_day).zfill(4) + 'h00.1xday.nc'
     print(filename)
     # Open file and grab variables from it
     f = Dataset(filename, mode='r')
     # N_time x N_lev x N_lat x N_lon
-    zTin = f.variables['tg_before_convection'][:]
-    zqin = f.variables['qg_before_convection'][:]
+    zTin = f.variables['t_intermed'][:]
+    zqin = f.variables['q_intermed'][:]
     zTout = f.variables['dt_tg_convection'][:]
     zqout = f.variables['dt_qg_convection'][:]
     zPout = f.variables['convection_rain'][:]  # N_time x N_lat x N_lon
@@ -126,24 +128,26 @@ randind_vld = randinds[i90:]
 # For convection-only learning
 pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
              Tout[:, :, randind_trn], qout[:, :, randind_trn],
-             Pout[:, randind_trn], lat], open('./conv_training_v3.pkl', 'wb'))
+             Pout[:, randind_trn], lat],
+            open('./' + runname + '_conv_training_v3.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_tst], qin[:, :, randind_tst],
              Tout[:, :, randind_tst], qout[:, :, randind_tst],
-             Pout[:, randind_tst], lat], open('./conv_testing_v3.pkl', 'wb'))
+             Pout[:, randind_tst], lat],
+            open('./' + runname + '_conv_testing_v3.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_vld], qin[:, :, randind_vld],
              Tout[:, :, randind_vld], qout[:, :, randind_vld],
              Pout[:, randind_vld], lat],
-            open('./conv_validation_v3.pkl', 'wb'))
+            open('./' + runname + '_conv_validation_v3.pkl', 'wb'))
 # For convection + condensation learning
 pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
              Tout_all[:, :, randind_trn], qout_all[:, :, randind_trn],
              Pout_all[:, randind_trn], lat],
-            open('./convcond_training_v3.pkl', 'wb'))
+            open('./' + runname + '_convcond_training_v3.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_tst], qin[:, :, randind_tst],
              Tout_all[:, :, randind_tst], qout_all[:, :, randind_tst],
              Pout_all[:, randind_tst], lat],
-            open('./convcond_testing_v3.pkl', 'wb'))
+            open('./' + runname + '_convcond_testing_v3.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_vld], qin[:, :, randind_vld],
              Tout_all[:, :, randind_vld], qout_all[:, :, randind_vld],
              Pout_all[:, randind_vld], lat],
-            open('./convcond_validation_v3.pkl', 'wb'))
+            open('./' + runname + '_convcond_validation_v3.pkl', 'wb'))
