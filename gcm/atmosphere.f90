@@ -178,6 +178,7 @@ real, allocatable, dimension(:,:,:) ::                                        &
      non_diff_dt_qg,       &   ! moisture tendency except from vertical diffusion
      conv_dt_tg,           &   ! temperature tendency from convection
      conv_dt_qg,           &   ! moisture tendency from convection
+     conv_dt_qgdebug,           &   ! moisture tendency from convection
      cond_dt_tg,           &   ! temperature tendency from condensation
      cond_dt_qg,           &   ! moisture tendency from condensation
      t_intermed,           &   ! temperature before convection
@@ -198,6 +199,7 @@ real, allocatable, dimension(:,:) ::                                          &
      invtau_bm_q,          &   ! humidity relaxation timescale                          
      capeflag,             &   ! a flag that says why cape=0                                
      rain,                 &   !
+     raindebug,                 &   !
      snow
 
 
@@ -214,9 +216,11 @@ integer ::                                                                    &
      id_diff_dt_tg,        &   ! temperature tendency from vertical diffusion
      id_diff_dt_qg,        &   ! moisture tendency from vertical diffusion
      id_conv_rain,         &   ! rain from convection
+     id_conv_raindebug,         &   ! rain from convection
      id_cond_rain,         &   ! rain from condensation
      id_conv_dt_tg,        &   ! temperature tendency from convection
      id_conv_dt_qg,        &   ! moisture tendency from convection
+     id_conv_dt_qgdebug,        &   ! moisture tendency from convection
      id_t_intermed,        &   ! temperature before convection
      id_q_intermed,        &   ! humidity before convection
      id_cond_dt_tg,        &   ! temperature tendency from condensation
@@ -385,6 +389,7 @@ allocate(net_surf_sw_down        (is:ie, js:je))
 allocate(surf_lw_down            (is:ie, js:je))
 allocate(conv_dt_tg  (is:ie, js:je, num_levels))
 allocate(conv_dt_qg  (is:ie, js:je, num_levels))
+allocate(conv_dt_qgdebug  (is:ie, js:je, num_levels))
 allocate(cond_dt_tg  (is:ie, js:je, num_levels))
 allocate(cond_dt_qg  (is:ie, js:je, num_levels))
 allocate(t_intermed  (is:ie, js:je, num_levels))
@@ -398,6 +403,7 @@ allocate(invtau_bm_t  (is:ie, js:je))
 allocate(invtau_bm_q  (is:ie, js:je))
 allocate(capeflag     (is:ie, js:je))
 allocate(rain         (is:ie, js:je))
+allocate(raindebug         (is:ie, js:je))
 allocate(snow         (is:ie, js:je))
 allocate(bmflag       (is:ie, js:je))
 
@@ -409,6 +415,7 @@ t_ref = 0.0; q_ref = 0.0
                                                                                                      
 coldT = .false.
 rain = 0.0; snow = 0.0
+raindebug = 0.0
 
                                                                                 
 ! end POG additions
@@ -506,10 +513,14 @@ if(neural_convection_flag) then
                                xscale_mean,xscale_stnd,yscale_absmax)
    id_conv_dt_qg = register_diag_field(mod_name, 'dt_qg_convection',          &
         axes(1:3), Time, 'Moisture tendency from convection','kg/kg/s')
+   id_conv_dt_qgdebug = register_diag_field(mod_name, 'dt_qg_convectiondebug',          &
+        axes(1:3), Time, 'Moisture tendency from convection debug','kg/kg/s')
    id_conv_dt_tg = register_diag_field(mod_name, 'dt_tg_convection',          &
         axes(1:3), Time, 'Temperature tendency from convection','K/s')
    id_conv_rain = register_diag_field(mod_name, 'convection_rain',            &                  
         axes(1:2), Time, 'Rain from convection','kg/m/m/s')                                      
+   id_conv_raindebug = register_diag_field(mod_name, 'convection_raindebug',            &                  
+        axes(1:2), Time, 'Rain from convection debug','kg/m/m/s')                                      
 !   id_r_w1 = register_static_field(mod_name, 'r_w1', axes(5:6), 'r_w1','r_w1')                   
 !   id_r_b1 = register_static_field(mod_name, 'r_b1', (/axes(6)/),
 !   'r_b1','r_b1')                 
@@ -594,6 +605,7 @@ dt_tracers = 0.0
 ! added by CW 12/16/2003
 conv_dt_tg  = 0.0
 conv_dt_qg  = 0.0
+conv_dt_qgdebug  = 0.0
 cond_dt_tg  = 0.0
 cond_dt_qg  = 0.0
 ! end CW addition
@@ -641,12 +653,13 @@ endif
 
 if (neural_convection_flag) then
    rain = 0.0; snow = 0.0
+   raindebug = 0.0
    call neural_convection (                            delta_t,   tg(:,:,:,previous),        &
                               grid_tracers(:,:,:,previous,nhum),  p_full,        &
                                                          p_half,  rain,          &
                                                      conv_dt_tg,  conv_dt_qg,       &
                                                          r_w1, r_w2, r_b1, r_b2, &
-                                                         xscale_mean, xscale_stnd, yscale_absmax)
+                                                         xscale_mean, xscale_stnd, yscale_absmax, raindebug, conv_dt_qgdebug)
 
 endif
 
@@ -669,14 +682,18 @@ if (lwet_convection .or. neural_convection_flag) then
 !  note the delta's are returned rather than the time derivatives
    conv_dt_tg = conv_dt_tg/delta_t
    conv_dt_qg = conv_dt_qg/delta_t
+   conv_dt_qgdebug = conv_dt_qgdebug/delta_t
    rain       = rain/delta_t
+   raindebug       = raindebug/delta_t
                                                                                                      
    dt_tg = dt_tg + conv_dt_tg
    dt_tracers(:,:,:,nhum) = dt_tracers(:,:,:,nhum) + conv_dt_qg
                                                                                                      
    if(id_conv_dt_qg > 0) used = send_data(id_conv_dt_qg, conv_dt_qg, Time)
+   if(id_conv_dt_qgdebug > 0) used = send_data(id_conv_dt_qgdebug, conv_dt_qgdebug, Time)
    if(id_conv_dt_tg > 0) used = send_data(id_conv_dt_tg, conv_dt_tg, Time)
    if(id_conv_rain > 0) used = send_data(id_conv_rain, rain, Time)
+   if(id_conv_raindebug > 0) used = send_data(id_conv_raindebug, raindebug, Time)
                                                                                                      
 else
    tg_tmp = tg(:,:,:,previous)

@@ -43,7 +43,7 @@ contains
    subroutine neural_convection (dt, tin, qin, pfull, phalf,  &
                                   rain, tdel, qdel,  &
                                    r_w1, r_w2, r_b1, r_b2, &
-                               xscale_mean,xscale_stnd,yscale_absmax)
+                               xscale_mean,xscale_stnd,yscale_absmax, raindebug, qdeldebug)
 
 !-----------------------------------------------------------------------
 !
@@ -68,15 +68,15 @@ contains
 
    real   , intent(in) , dimension(:,:,:) :: tin, qin, pfull, phalf
    real   , intent(in)                    :: dt
-   real   , intent(out), dimension(:,:)   :: rain
-   real   , intent(out), dimension(:,:,:) :: tdel, qdel
+   real   , intent(out), dimension(:,:)   :: rain, raindebug
+   real   , intent(out), dimension(:,:,:) :: tdel, qdel, qdeldebug
 !-----------------------------------------------------------------------
 !---------------------- local data -------------------------------------
 
-   real,dimension(size(tin,1),size(tin,2))             :: precip
-   real,dimension(32/2)                         :: qpc, tpc
+   real,dimension(size(tin,1),size(tin,2))             :: precip, precipdebug
+   real,dimension(16)                         :: qpc, tpc
    real,dimension(32)                       :: features, targets
-   real                                                :: deltak, qnew_tmp
+   real                                                :: deltak
  integer  i, j, k, ix, jx, kx, ktop, kx2, kx2ind
 
       real, intent(in), dimension(32, 100)   :: r_w1 
@@ -94,7 +94,6 @@ contains
 !-----------------------------------------------------------------------
 !     computation of precipitation by betts-miller scheme
 !-----------------------------------------------------------------------
-
       if (do_init) call error_mesg ('neural_convection',  &
                          'neural_convection_init has not been called.', FATAL)
       ix=size(tin,1)
@@ -106,6 +105,7 @@ contains
           do j=1,jx
 ! Initialize variables
              precip(i,j) = 0.
+             precipdebug(i,j) = 0.
              features = 0.
 !             a1 = 0.
 !             a2 = 0.
@@ -113,6 +113,8 @@ contains
              tpc = 0.
              z1 = 0.
              z2 = 0.
+             tdel(i,j,:) = 0.
+             qdel(i,j,:) = 0.
 !             softmax = 0.
 !             prob = 0.
              targets = 0.
@@ -161,20 +163,24 @@ contains
 ! Separate out targets into heating and moistening tendencies
              tdel(i,j,kx2ind:kx) = targets(1:kx2)
              qdel(i,j,kx2ind:kx) = targets(kx2 + 1:2*kx2)
-! Correct units (nn trained on K/day and g/kg/day rather than K and kg/kg)
-             tdel(i,j,:) = tdel(i,j,:) / 3600. / 24.
-             qdel(i,j,:) = qdel(i,j,:) / 3600. / 24. / 1000.
+! Correct units (nn trained on K/day and g/kg/day rather than K/s and kg/kg/s)
+             tdel(i,j,:) = tdel(i,j,:) / 86400.  ! 3600. / 24.
+             qdel(i,j,:) = qdel(i,j,:) / 86400000.  !3600. / 24. / 1000.
 ! Predicted temperature and humidity tendencies, but actually want the delta T and q
-! So multiply each by the time step
+! So multiply each by the time step (now units of K and kg/kg)
              tdel(i,j,:) = tdel(i,j,:) * dt
              qdel(i,j,:) = qdel(i,j,:) * dt
 ! If any humidities would become negative set them to zero (and recalc precip)
              do k=1, kx
-                 qnew_tmp = 0.0
-                 qnew_tmp = qpc(k) + qdel(i,j,k)
-                 if ( qnew_tmp .lt. 0.0 ) then
+                 if ( qin(i,j,k) + qdel(i,j,k) .lt. 0.0 ) then
                      ! Dry out level, but don't let it go negative
-                     qdel(i,j,k) = -qpc(k)
+!                     write(*,*) 'Level, qpc, qdel <0.'
+!                     write(*,*) k
+!                     write(*,*) qpc(k)
+!                     write(*,*) qdel(i,j,k)
+                     qdeldebug(i,j,k) = qdel(i,j,k)
+                     qdel(i,j,k) = -qin(i,j,k)
+!                     write(*,*) 'fin'
                  endif
              end do
 
@@ -182,9 +188,19 @@ contains
              do k=1, kx
                  precip(i,j) = precip(i,j) - qdel(i,j,k)*(phalf(i,j,k+1)- &
                             phalf(i,j,k))/grav
+             !    write(*,*) k
+             !    write(*,*) qdel(i,j,k)
+             !    write(*,*) qpc(k)
              end do
+             !write(*, *) 'end profile'
+             !write(*, *) precip(i,j)
 ! If precipitation is negative, just set outputs to zero!
              if ( precip(i,j) .lt. 0.0 ) then 
+!                 write(*,*) 'precip <0 for (P, i, j)'
+!                 write(*,*) precip(i,j)
+!                 write(*,*) i
+!                 write(*,*) j
+                 precipdebug(i,j) = precip(i,j)
                  precip(i,j) = 0.0
                  tdel(i,j,:) = 0.0
                  qdel(i,j,:) = 0.0
@@ -209,7 +225,7 @@ contains
        end do
 
        rain = precip
-       
+       raindebug = precipdebug
    end subroutine neural_convection
 
 
@@ -244,7 +260,7 @@ contains
 !
 !-----------------------------------------------------------------------
 integer  unit,io,ierr
-character(len=128) :: neural_filename = "neural_weights_v3.nc"
+character(len=128) :: neural_filename = "neural_weights_v4.nc"
 
 real, intent(out), dimension(32,100)    :: r_w1
 real, intent(out), dimension(100)       :: r_b1
@@ -287,6 +303,9 @@ integer :: xscale_stnd_varid, yscale_absmax_varid
       r_w2 = 0.
       r_b1 = 0.
       r_b2 = 0.
+      xscale_mean = 0.
+      xscale_stnd = 0.
+      yscale_absmax = 0.
 
 ! Open the file. NF90_NOWRITE tells netCDF we want read-only access
 ! Get the varid of the data variable, based on its name.
