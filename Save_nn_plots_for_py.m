@@ -19,6 +19,10 @@ function Save_nn_plots_for_py(exper)
 %Get netcdf files for 24x data
 [f,~,~] = experiment_jgd(exper);
 
+if strcmp(exper,'neural_del1.2_abs1.0_T42_v3')
+    f.x24 = f.x1;
+end
+
 %Initialize
 conv=[]; cond=[]; time=[];
 if strcmp(exper,'nowetconvection_abs1.0')
