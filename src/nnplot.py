@@ -20,8 +20,9 @@ def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
     r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
            pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
     # Open the validation data set
-    x_unscl, ytrue_unscl,_,_,_,_,_,_ = nnload.loaddata(datasource, minlev=min(lev),
-                                       noshallow=noshallow, rainonly=rainonly)
+    x_unscl, ytrue_unscl, _, _, _, _, _, _ = \
+        nnload.loaddata(datasource, minlev=min(lev), noshallow=noshallow,
+                        rainonly=rainonly)
     # Set figure path and create directory if it does not exist
     figpath = './figs/' + r_str + '/'
     # If plotting on training data create a new subfolder
@@ -30,17 +31,18 @@ def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
     if not os.path.exists(figpath):
         os.makedirs(figpath)
     # Scale data using input scalers
-    x_scl     = nnload.transform_data(x_ppi, x_pp, x_unscl)
+    x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
     ytrue_scl = nnload.transform_data(y_ppi, y_pp, ytrue_unscl)
     # Apply neural network to get predicted output
-    ypred_scl   = r_mlp_eval.predict(x_scl)
+    ypred_scl = r_mlp_eval.predict(x_scl)
     ypred_unscl = nnload.inverse_transform_data(y_ppi, y_pp, ypred_scl)
     # Do plotting
     # Plot model errors over iteration history
     plot_model_error_over_time(errors, r_str, figpath)
-    # Plot historgram showing how scaling changed character of input and output data
-    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat, lev,
-                               figpath)
+    # Plot historgram showing how scaling changed character of input and output
+    # data
+    check_scaling_distribution(x_unscl, x_scl, ytrue_unscl, ytrue_scl, lat,
+                               lev, figpath)
     # Plot histogram showing how well true and predicted values match
     check_output_distribution(ytrue_unscl, ytrue_scl, ypred_unscl, ypred_scl,
                               lat, lev, figpath)
@@ -60,6 +62,7 @@ def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
     make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
                        datasource)
 
+
 def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
                        datafile):
     # Load data at each level
@@ -69,27 +72,27 @@ def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
     # Make figs
     # True means
     f,ax1,ax2 = plot_contour(Tmean,qmean,lat,lev, avg_hem=False)
-    ax1.set_title('Temperature True Mean [K/day]')
-    ax2.set_title('Humidity True Mean [kg/kg/day]')
-    f.savefig(figpath + 'latlev_truemean.png', bbox_inches='tight',dpi=450)
+    ax1.set_title(r'$\Delta$ Temp True Mean [K/day]')
+    ax2.set_title(r'$\Delta$ Humid True Mean [kg/kg/day]')
+    f.savefig(figpath + 'latlev_truemean.png', bbox_inches='tight', dpi=450)
     plt.close()
     # Bias from true mean
     f,ax1,ax2 = plot_contour(Tbias,qbias,lat,lev, avg_hem=False)
-    ax1.set_title('Temperature Mean Bias [K/day]')
-    ax2.set_title('Humidity Mean Bias [kg/kg/day]')
-    f.savefig(figpath + 'latlev_bias.png', bbox_inches='tight',dpi=450)
+    ax1.set_title(r'$\Delta$ Temp Mean Bias [K/day]')
+    ax2.set_title(r'$\Delta$ Humid Mean Bias [kg/kg/day]')
+    f.savefig(figpath + 'latlev_bias.png', bbox_inches='tight', dpi=450)
     plt.close()
     # Root mean squared error
     f,ax1,ax2 = plot_contour(rmseT,rmseq,lat,lev, avg_hem=False)
-    ax1.set_title('Temperature RMSE [K/day]')
-    ax2.set_title('Humidity RMSE [kg/kg/day]')
-    f.savefig(figpath + 'latlev_rmse.png', bbox_inches='tight',dpi=450)
+    ax1.set_title(r'$\Delta$ Temp RMSE [K/day]')
+    ax2.set_title(r'$\Delta$ Humid RMSE [kg/kg/day]')
+    f.savefig(figpath + 'latlev_rmse.png', bbox_inches='tight', dpi=450)
     plt.close()
     # Pearson r Correlation Coefficient
     f,ax1,ax2 = plot_contour(rT, rq, lat, lev, avg_hem=False)
-    ax1.set_title('Temperature CorrelationCoefficient')
-    ax2.set_title('Humidity Correlation Coefficient')
-    f.savefig(figpath + 'latlev_corrcoeff.png', bbox_inches='tight',dpi=450)
+    ax1.set_title(r'$\Delta$ Temp Correlation Coefficient')
+    ax2.set_title(r'$\Delta$ Humid Correlation Coefficient')
+    f.savefig(figpath + 'latlev_corrcoeff.png', bbox_inches='tight', dpi=450)
     plt.close()
 
 def plot_contour(T, q, lat, lev, avg_hem=False):
@@ -120,7 +123,7 @@ def plot_rmse_vs_lat(r_mlp, figpath, data_dir='./data/', minlev=0.0, rainonly=Fa
     plt.subplot(2,1,2)
     plt.plot(lat, rmseq_nh, label='NH')
     plt.plot(lat, rmseq_sh, label='SH')
-    plt.title('Humidity column RMSE')
+    plt.title(r'$\Delta$ Humid column RMSE')
     plt.xlabel('Latitude')
     plt.legend()
     fig.savefig(figpath + 'rmse_vs_lat.png', bbox_inches='tight',dpi=450)
@@ -229,36 +232,43 @@ def plot_enthalpy(y3_true, y3_pred, dlev, figpath):
 # ----  PLOTTING SCRIPTS  ---- #
 out_str_dict = {'T':'K/day','q':'g/kg/day'}
 
+
 def do_mean_or_std(method, vari, true, pred, lev, ind):
-    methods = {'mean':np.mean,'std':np.std}
-    plt.subplot(2,2,ind)
-    m = lambda x: methods[method](unpack(x,vari), axis=0).T
+    methods = {'mean': np.mean, 'std': np.std}
+    methods_ti = {'mean': 'Mean', 'std': 'Standard Deviation'}
+    plt.subplot(2, 2, ind)
+    m = lambda x: methods[method](unpack(x, vari), axis=0).T
     plt.plot(m(true), lev, label='true')
     plt.plot(m(pred), lev, label='pred')
-    plt.ylim(np.amax(lev),np.amin(lev))
+    plt.ylim(np.amax(lev), np.amin(lev))
     plt.ylabel('$\sigma$')
-    plt.xlabel(out_str_dict[vari])
-    plt.title(vari + " " + method)
+    if ind > 2:
+        plt.xlabel(out_str_dict[vari])
+    plt.title(r'$\Delta$ ' + vari + " " + methods_ti[method])
     plt.legend()
+
 
 def plot_pearsonr(y_true, y_pred, vari, lev, label=None):
     r = np.empty(y_true.shape[1])
     prob = np.empty(y_true.shape[1])
     for i in range(y_true.shape[1]):
-        r[i], prob[i] = scipy.stats.pearsonr(y_true[:,i],y_pred[:,i])
-    plt.plot(unpack(r,vari, axis=0), lev, label=label)
+        r[i], prob[i] = scipy.stats.pearsonr(y_true[:, i], y_pred[:, i])
+    plt.plot(unpack(r, vari, axis=0), lev, label=label)
     plt.ylim([np.amax(lev), np.amin(lev)])
     plt.ylabel('$\sigma$')
     plt.title('Correlation Coefficient')
 
-def plot_rmse(y_true,y_pred,vari,lev, label=None):
-    rmse = np.sqrt(metrics.mean_squared_error(y_true,y_pred,multioutput='raw_values'))
+
+def plot_rmse(y_true, y_pred, vari, lev, label=None):
+    rmse = np.sqrt(metrics.mean_squared_error(y_true, y_pred,
+                                              multioutput='raw_values'))
     rmse = rmse / np.mean(y_true, axis=0)
-    plt.plot(unpack(rmse,vari,axis=0), lev, label=label)
-    plt.ylim([np.amax(lev),np.amin(lev)])
+    plt.plot(unpack(rmse, vari, axis=0), lev, label=label)
+    plt.ylim([np.amax(lev), np.amin(lev)])
     plt.ylabel('$\sigma$')
     plt.xlabel(out_str_dict[vari])
     plt.title('Root Mean Squared Error/mean')
+
 
 def plot_expl_var(y_true,y_pred,vari,lev, label=None):
     expl_var = metrics.explained_variance_score(y_true,y_pred,multioutput='raw_values')
@@ -307,13 +317,13 @@ def check_output_distribution(yt_unscl, yt_scl, yp_unscl, yp_scl, lat, lev,
     # For unscaled variables
     fig, ax = plt.subplots(2, 2)
     x1, x2, bins = _plot_distribution(unpack(yt_unscl,'T'), lat, lev, fig,
-        ax[0,0], './figs/',r'$\Delta$T true (unscld) [K/day]','')
+        ax[0,0], './figs/',r'$\Delta$T true [K/day]','')
     _plot_distribution(unpack(yp_unscl,'T'), lat, lev, fig,
-        ax[0,1], './figs/',r'$\Delta$T pred (unscld) [K/day]','',x1, x2, bins)
+        ax[0,1], './figs/',r'$\Delta$T pred [K/day]','',x1, x2, bins)
     x1,x2, bins=_plot_distribution(unpack(yt_unscl,'q'), lat, lev, fig,
-        ax[1,0], './figs/',r'$\Delta$q true (unscld) [g/kg/day]','')
+        ax[1,0], './figs/',r'$\Delta$q true [g/kg/day]','')
     _plot_distribution(unpack(yp_unscl,'q'), lat, lev, fig,
-        ax[1,1], './figs/',r'$\Delta$q pred (unscld) [g/kg/day]','',x1, x2, bins)
+        ax[1,1], './figs/',r'$\Delta$q pred [g/kg/day]','',x1, x2, bins)
     fig.savefig(figpath + 'output_compare_true_pred_unscaled.png',
         bbox_inches='tight', dpi=450)
     plt.close()
@@ -512,45 +522,73 @@ def plot_model_error_over_time(errors, mlp_str, fig_dir):
 
 # ----  META-PLOTTING SCRIPTS  ---- #
 def meta_compare_error_rate_v2():
-    neur_str = ['10R', '50R', '100R', '10R_10R', '50R_50R', '100R_100R']
-    trn_ex = [1000, 5000, 10000, 100000]
-    e = dict()
-    tr = np.zeros((len(neur_str), len(trn_ex)))
-    cv = np.zeros((len(neur_str), len(trn_ex)))
-    mse = np.zeros((len(neur_str), len(trn_ex)))
+    neur_strL = ['5R', '10R', '5R_5R', '50R', '100R', '10R_10R', '200R',
+                 '50R_50R', '100R_100R', '200R_200R']
+    neur_str = ['5', '10', '5-5', '50', '100', '10-10', '200',
+                '50-50', '100-100', '200-200']
+    neur_val = np.array([5, 10, 25, 50, 100, 125, 200, 2500, 1e4, 4e4])
+    trn_ex = np.array([1000, 5000, 10000, 100000, 400000])
+    tr = np.nan * np.zeros((len(neur_str), len(trn_ex)))
+    cv = np.nan * np.zeros((len(neur_str), len(trn_ex)))
+    mse = np.nan * np.zeros((len(neur_str), len(trn_ex)))
     ptf = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex'
-    for i, hid in enumerate(neur_str):
+    for i, hid in enumerate(neur_strL):
         for j, nex in enumerate(trn_ex):
             r_str = ptf + str(nex) + '_r_' + hid + \
-                '_mom0.9reg1e-05_Niter10000_v3'
-            _, _, err, _, _, _, _, _, _, _ = \
-                pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
-            tr[i, j] = err[-1, 4]
-            cv[i, j] = err[-1, 2]
-            # yp, yt = nnload.get_pred_true_from_mlp(r_str, minlev=0.2)
-            # mse[i, j] = nnload.calc_mse_simple(yp, yt)
+                '_mom0.9reg1e-06_Niter10000_v3'
+            try:
+                _, _, err, _, _, _, _, _, _, _ = \
+                    pickle.load(open('./data/regressors/' + r_str + '.pkl',
+                                     'rb'))
+                tr[i, j] = err[-1, 4]
+                cv[i, j] = err[-1, 2]
+            except FileNotFoundError:
+                print(r_str + ' was not found.')
     # Plot as a function of number of hidden neurons
-    plt.figure()
-    markers = ['o', 's', 'p', '*']
-    for i, mark in enumerate(markers):
-        plt.plot(tr[:, i], ls='-', marker=mark, color='blue',
-                 label='Train, N={:d}'.format(trn_ex[i]))
-    for i, mark in enumerate(markers):
-        plt.plot(cv[:, i], ls='-', marker=mark, color='green',
-                 label='Train, N={:d}'.format(trn_ex[i]))
-    plt.xticks(range(len(neur_str)), neur_str)
-    plt.legend()
-    plt.show()
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
+    colormat = plt.cm.plasma(np.linspace(0, 1, tr.shape[1]))
+    for i in range(tr.shape[1]):
+        # Indicate where missing values are for plotting
+        tr_mask = np.isfinite(tr[:, i])
+        cv_mask = np.isfinite(cv[:, i])
+        ax1.semilogx(neur_val[tr_mask], tr[tr_mask, i], marker='o', color=colormat[i, :],
+                 label='m={:d}'.format(trn_ex[i]))
+        ax2.semilogx(neur_val[cv_mask]  , cv[cv_mask, i], marker='o', color=colormat[i, :],
+                 label='m={:d}'.format(trn_ex[i]))
+    for ax in [ax1, ax2]:
+        ax.set_xticks(neur_val)
+        ax.set_xticklabels(neur_str, rotation='vertical')
+    ax1.legend(fontsize=16)
+    ax1.set_xlim(0.9*min(neur_val), 1.1*max(neur_val))
+    ax1.set_title('(a) Training Error', fontsize=18)
+    ax2.set_title('(b) Cross-Validation Error', fontsize=18)
+    for ax in [ax1, ax2]:
+        ax.tick_params(axis='both', which='major', labelsize=16)
+    fig.text(0.5, -0.1, 'Number of Hidden Neurons', ha='center', fontsize=18)
+    fig.text(0.04, 0.5, 'Mean Squared Error', va='center', rotation='vertical',
+             fontsize=18)
+    fig.savefig('./figs/NN_eval_vs_h.eps', bbox_inches='tight')
     # Plot as a function of number of training examples
-    fig, (ax1, ax2) = plt.subplots(1, 2)
+    fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
     colormat = plt.cm.plasma(np.linspace(0, 1, tr.shape[0]))
     for i in range(tr.shape[0]):
-        ax1.semilogx(trn_ex, tr[i, :], marker='o', color=colormat[i, :],
+        ax1.semilogx(trn_ex*0.5, tr[i, :], marker='o', color=colormat[i, :],
                      label=neur_str[i])
-        ax2.semilogx(trn_ex, cv[i, :], marker='o', color=colormat[i, :],
+        ax2.semilogx(trn_ex*0.5, cv[i, :], marker='o', color=colormat[i, :],
                      label=neur_str[i])
-        ax2.legend()
+    ax1.legend(fontsize=16, ncol=2)
+    ax1.set_xlim(0.9*min(trn_ex*0.5), 1.1*max(trn_ex*0.5))
+    ax1.set_ylim(0, 0.4)
+    ax1.set_title('(a) Training Error', fontsize=18)
+    ax2.set_title('(b) Cross-Validation Error', fontsize=18)
+    fig.text(0.5, 0.04, 'Number of Training Examples', ha='center',
+             fontsize=18)
+    fig.text(0.04, 0.5, 'Mean Squared Error', va='center', rotation='vertical',
+             fontsize=18)
+    for ax in [ax1, ax2]:
+        ax.tick_params(axis='both', which='major', labelsize=16)
     plt.show()
+    fig.savefig('./figs/NN_eval_vs_m.eps', bbox_inches='tight')
     # plt.figure()
     # for i, mark in enumerate(markers):
     #     plt.plot(mse[:, i], ls='-', marker=mark, color='blue',
