@@ -476,9 +476,9 @@ def test_neural_fortran(ind):
         'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
-    datasource = './data/neural_del1.2_abs1.0_T42_v4check_conv_training_v3.pkl'
-    # datasource = './data/neural_del1.2_abs1.0_T42_v4weird_conv_training_v3.pkl'
-    x_unscl, ytrue_unscl, _, _, _, _, _, _ = loaddata(datasource, minlev=min(lev),
+    ds = './data/neural_del1.2_abs1.0_T42_v4check_conv_training_v3.pkl'
+    # ds = './data/neural_del1.2_abs1.0_T42_v4weird_conv_training_v3.pkl'
+    x_unscl, ytrue_unscl, _, _, _, _, _, _ = loaddata(ds, minlev=min(lev),
                                                       randseed=True)
     x_scl = transform_data(x_ppi, x_pp, x_unscl)
     ypred_scl = mlp.predict(x_scl)
@@ -511,5 +511,3 @@ def test_neural_fortran(ind):
     plt.legend()
     print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
     print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
-    xtoa, ytoa, _, _, _, _, _, _ = loaddata(datasource, minlev=0.,
-                                            randseed=True)
