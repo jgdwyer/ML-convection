@@ -521,29 +521,59 @@ def plot_model_error_over_time(errors, mlp_str, fig_dir):
 
 
 # ----  META-PLOTTING SCRIPTS  ---- #
-def meta_compare_error_rate_v2():
+def load_r_mlps():
     neur_strL = ['5R', '10R', '5R_5R', '50R', '100R', '10R_10R', '200R',
                  '50R_50R', '100R_100R', '200R_200R']
     neur_str = ['5', '10', '5-5', '50', '100', '10-10', '200',
                 '50-50', '100-100', '200-200']
     neur_val = np.array([5, 10, 25, 50, 100, 125, 200, 2500, 1e4, 4e4])
     trn_ex = np.array([1000, 5000, 10000, 100000, 400000])
-    tr = np.nan * np.zeros((len(neur_str), len(trn_ex)))
-    cv = np.nan * np.zeros((len(neur_str), len(trn_ex)))
-    mse = np.nan * np.zeros((len(neur_str), len(trn_ex)))
+    regs = np.array([1e-7, 1e-6, 1e-5])
+    tr = np.nan * np.zeros((len(neur_str), len(trn_ex), len(regs)))
+    cv = np.nan * np.zeros((len(neur_str), len(trn_ex), len(regs)))
     ptf = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex'
     for i, hid in enumerate(neur_strL):
         for j, nex in enumerate(trn_ex):
-            r_str = ptf + str(nex) + '_r_' + hid + \
-                '_mom0.9reg1e-06_Niter10000_v3'
-            try:
-                _, _, err, _, _, _, _, _, _, _ = \
-                    pickle.load(open('./data/regressors/' + r_str + '.pkl',
-                                     'rb'))
-                tr[i, j] = err[-1, 4]
-                cv[i, j] = err[-1, 2]
-            except FileNotFoundError:
-                print(r_str + ' was not found.')
+            for k, reg in enumerate(regs):
+                r_str = ptf + str(nex) + '_r_' + hid + \
+                    '_mom0.9reg' + str(reg) + '_Niter10000_v3'
+                try:
+                    _, _, err, _, _, _, _, _, _, _ = \
+                        pickle.load(open('./data/regressors/' + r_str + '.pkl',
+                                         'rb'))
+                    tr[i, j, k] = err[-1, 4]
+                    cv[i, j, k] = err[-1, 2]
+                except FileNotFoundError:
+                    None
+                    # print(r_str + ' was not found.')
+    return tr, cv, neur_str, neur_val, trn_ex, regs
+
+
+def meta_plot_regs():
+    tr, cv, neur_str, neur_val, trn_ex, regs = load_r_mlps()
+    axcount=0
+    fig, ax = plt.subplots(len(neur_str), len(trn_ex))
+    for i, neur_s in enumerate(neur_str):
+        for j, trn_e in enumerate(trn_ex):
+            masks = np.isfinite(tr[i,j,:])
+            ax[i,j].semilogx(regs[masks], tr[i,j,masks], marker='o')
+            ax[i,j].semilogx(regs[masks], cv[i,j,masks], marker='o', color='green')
+            ax[i,j].set_title(neur_s + ' ' + str(trn_e))
+            # if sum(np.isfinite(tr[i,j,:])) > 1:
+    #             axcount = axcount + 1
+    # fig, ax = plt.subplots(axcount, 1)
+    # axcount=0
+    # for i, neur_s in enumerate(neur_str):
+    #     for j, trn_e in enumerate(trn_ex):
+    #         if sum(np.isfinite(tr[i,j,:])) > 1:
+    #             ax[axcount].semilogx(regs, tr[i,j,:], marker='o')
+    #             axcount = axcount + 1
+
+
+def meta_compare_error_rate_v2():
+    tr, cv, neur_str, neur_val, trn_ex, regs = load_r_mlps()
+    tr = np.squeeze(tr[:, :, regs==1e-6])
+    cv = np.squeeze(cv[:, :, regs==1e-6])
     # Plot as a function of number of hidden neurons
     fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
     colormat = plt.cm.plasma(np.linspace(0, 1, tr.shape[1]))
@@ -551,6 +581,7 @@ def meta_compare_error_rate_v2():
         # Indicate where missing values are for plotting
         tr_mask = np.isfinite(tr[:, i])
         cv_mask = np.isfinite(cv[:, i])
+        print(neur_val[tr_mask])
         ax1.semilogx(neur_val[tr_mask], tr[tr_mask, i], marker='o', color=colormat[i, :],
                  label='m={:d}'.format(trn_ex[i]))
         ax2.semilogx(neur_val[cv_mask]  , cv[cv_mask, i], marker='o', color=colormat[i, :],
@@ -572,9 +603,11 @@ def meta_compare_error_rate_v2():
     fig, (ax1, ax2) = plt.subplots(1, 2, sharex=True, sharey=True)
     colormat = plt.cm.plasma(np.linspace(0, 1, tr.shape[0]))
     for i in range(tr.shape[0]):
-        ax1.semilogx(trn_ex*0.5, tr[i, :], marker='o', color=colormat[i, :],
+        tr_mask = np.isfinite(tr[i, :])
+        cv_mask = np.isfinite(cv[i, :])
+        ax1.semilogx(trn_ex[tr_mask]*0.5, tr[i, tr_mask], marker='o', color=colormat[i, :],
                      label=neur_str[i])
-        ax2.semilogx(trn_ex*0.5, cv[i, :], marker='o', color=colormat[i, :],
+        ax2.semilogx(trn_ex[cv_mask]*0.5, cv[i, cv_mask], marker='o', color=colormat[i, :],
                      label=neur_str[i])
     ax1.legend(fontsize=16, ncol=2)
     ax1.set_xlim(0.9*min(trn_ex*0.5), 1.1*max(trn_ex*0.5))
