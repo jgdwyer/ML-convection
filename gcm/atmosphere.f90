@@ -500,7 +500,7 @@ if(lwet_convection) then
         axes(1:2), Time, 'Rain from convection','kg/m/m/s')
 endif
 
-if(neural_convection_flag) then
+if(neural_convection_flag .or. neural_convcond_flag) then
    call neural_convection_init(r_w1, r_w2, r_b1, r_b2, &
                                xscale_mean,xscale_stnd,yscale_absmax)
    id_conv_dt_qg = register_diag_field(mod_name, 'dt_qg_convection',          &
@@ -640,7 +640,7 @@ if (neural_convection_flag .or. neural_convcond_flag) then
 endif
 
                                                                                                   
-if (lwet_convection .or. neural_convection_flag. or. neural_convcond_flag) then 
+if (lwet_convection .or. neural_convection_flag .or. neural_convcond_flag) then 
    tg_tmp = conv_dt_tg + tg(:,:,:,previous)
    qg_tmp = conv_dt_qg + grid_tracers(:,:,:,previous,nhum)
                                                                                                      
