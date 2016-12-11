@@ -1,5 +1,4 @@
 import numpy as np
-from netCDF4 import Dataset
 from sklearn import preprocessing, metrics
 import scipy.stats
 import pickle
@@ -313,98 +312,6 @@ def whenconvection(y, verbose=True):
     return cv, cv_strength
 
 
-def write_netcdf_v4():
-    mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
-        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
-    datasource = './data/conv_training_v3.pkl'
-    # Set output filename
-    filename = '/Users/jgdwyer/neural_weights_v4.nc'
-    # Load ANN and preprocessors
-    mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
-        pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
-    # Need to transform some data for preprocessors to be able to export params
-    x_unscl, y_unscl, _, _, _, _, _, _ = loaddata(datasource, minlev=min(lev))
-    x_scl = transform_data(x_ppi, x_pp, x_unscl)
-    y_scl = transform_data(y_ppi, y_pp, y_unscl)
-    # Also need to use the predict method to be able to export ANN params
-    _ = mlp.predict(x_scl)
-    # Grab weights and input normalization
-    w1 = mlp.get_parameters()[0].weights
-    w2 = mlp.get_parameters()[1].weights
-    b1 = mlp.get_parameters()[0].biases
-    b2 = mlp.get_parameters()[1].biases
-    xscale_mean = x_pp.mean_
-    xscale_stnd = x_pp.scale_
-    Nlev = len(lev)
-    yscale_absmax = np.zeros(b2.shape)
-    yscale_absmax[:Nlev] = y_pp[0]
-    yscale_absmax[Nlev:] = y_pp[1]
-    # Write weights to file
-    ncfile = Dataset(filename, 'w')
-    # Write the dimensions
-    ncfile.createDimension('N_in', w1.shape[0])
-    ncfile.createDimension('N_h1', w1.shape[1])
-    ncfile.createDimension('N_out', w2.shape[1])
-    # Create variable entries in the file
-    nc_w1 = ncfile.createVariable('w1', np.dtype('float64').char,
-                                  ('N_h1', 'N_in'))  # Reverse dims
-    nc_w2 = ncfile.createVariable('w2', np.dtype('float64').char,
-                                  ('N_out', 'N_h1'))
-    nc_b1 = ncfile.createVariable('b1', np.dtype('float64').char,
-                                  ('N_h1'))
-    nc_b2 = ncfile.createVariable('b2', np.dtype('float64').char,
-                                  ('N_out'))
-    nc_xscale_mean = ncfile.createVariable('xscale_mean',
-                                           np.dtype('float64').char, ('N_in'))
-    nc_xscale_stnd = ncfile.createVariable('xscale_stnd',
-                                           np.dtype('float64').char, ('N_in'))
-    nc_yscale_absmax = ncfile.createVariable('yscale_absmax',
-                                             np.dtype('float64').char,
-                                             ('N_out'))
-    # Write variables and close file - transpose because fortran reads it in
-    # "backwards"
-    nc_w1[:] = w1.T
-    nc_w2[:] = w2.T
-    nc_b1[:] = b1
-    nc_b2[:] = b2
-    nc_xscale_mean[:] = xscale_mean
-    nc_xscale_stnd[:] = xscale_stnd
-    nc_yscale_absmax[:] = yscale_absmax
-    # Write global file attributes
-    ncfile.description = mlp_str
-    ncfile.close()
-
-
-def verify_netcdf_weights():
-    # Load unscaled data
-    x, y, cv, Pout, lat, lev, dlev, timestep = \
-        loaddata('./data/conv_testing_v3.pkl',
-                 0.2, all_lats=True, indlat=None, rainonly=False)
-    # Load preprocessers
-    r_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' +\
-        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
-    r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat2, lev2, dlev = \
-        pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
-    # Load netcdf files
-    ncfile = Dataset('/Users/jgdwyer/neural_weights_v4.nc', 'r')
-    yscale_absmax = ncfile['yscale_absmax'][:]
-    yscale_absmax = yscale_absmax[:, None].T
-    xscale_mean = ncfile['xscale_mean'][:]
-    xscale_mean = xscale_mean[:, None].T
-    xscale_std = ncfile['xscale_stnd'][:]
-    xscale_std = xscale_std[:, None].T
-    # Scaled variables as calculated by NN weights
-    xs = transform_data(x_ppi, x_pp, x)
-    ys = transform_data(y_ppi, y_pp, y)
-    # Scaled variables as calculated by hand from netcdf files
-    xs_byhand = (x - xscale_mean)/xscale_std
-    ys_byhand = y/yscale_absmax
-    print('Difference between x-scaling methods: {:.1f}'.
-          format(np.sum(np.abs(xs - xs_byhand))))
-    print('Difference between y-scaling methods: {:.1f}'.
-          format(np.sum(np.abs(ys - ys_byhand))))
-
-
 def avg_hem(data, lat, axis, split=False):
     """Averages the NH and SH data (or splits them into two data sets)"""
     ixsh = np.where(lat < 0)[0]  # where returns a tuple
@@ -563,12 +470,14 @@ def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
     mse = np.mean(mse[np.isfinite(mse)])
     return mse
 
+
 def test_neural_fortran(ind):
     mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
         'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
-    datasource = './data/neural_del1.2_abs1.0_T42_v4check_conv_testing_v3.pkl'
+    datasource = './data/neural_del1.2_abs1.0_T42_v4check_conv_training_v3.pkl'
+    # datasource = './data/neural_del1.2_abs1.0_T42_v4weird_conv_training_v3.pkl'
     x_unscl, ytrue_unscl, _, _, _, _, _, _ = loaddata(datasource, minlev=min(lev),
                                                       randseed=True)
     x_scl = transform_data(x_ppi, x_pp, x_unscl)
@@ -579,38 +488,28 @@ def test_neural_fortran(ind):
     import src.nnplot as nnplot
     Ptrue = nnplot.calc_precip(ytrue_unscl, dlev)
     Ppred = nnplot.calc_precip(ypred_unscl, dlev)
-    # f,(a1,a2) = plt.subplots(1,2)
-    # a1.plot(unpack(x_unscl,'T')[ind,:].T,lev,label='input T [K]')
-    # a2.plot(unpack(x_unscl,'q')[ind,:].T,lev,label='input q [kg/kg]')
-    plt.figure()
-    print(unpack(ytrue_unscl,'T')[ind,:].T)
-    print(unpack(ytrue_unscl,'q')[ind,:].T)
-    plt.plot(unpack(ytrue_unscl,'T')[ind,:].T,lev,label='GCM dT')
-    plt.plot(unpack(ypred_unscl,'T')[ind,:],lev,label='pred dT')
-    plt.xlabel('K/day')
-    plt.legend()
-    plt.figure()
-    plt.plot(unpack(ytrue_unscl,'q')[ind,:],lev,label='GCM dq')
-    plt.plot(unpack(ypred_unscl,'q')[ind,:],lev,label='pred dq')
-    plt.xlabel('g/kg/day')
-    plt.legend()
-    plt.figure()
-    q0 = unpack(x_unscl,'q')[ind,:]*1000  # g/kg
-    dq = 20.*60.*unpack(ypred_unscl,'q')[ind,:]/3600./24.  # g/kg/day -> g/kg
-    plt.plot(q0,lev,label='q before')
-    plt.plot(q0+dq,lev,label='q after')
+    f, (a1, a2) = plt.subplots(1, 2)
+    a1.plot(unpack(ytrue_unscl, 'T')[ind, :], lev, label='GCM dT')
+    a1.plot(unpack(ypred_unscl, 'T')[ind, :], lev, label='pred dT')
+    a1.set_xlabel('K/day')
+    a1.set_ylim(1, 0)
+    a1.legend()
+    a2.plot(unpack(ytrue_unscl, 'q')[ind, :], lev, label='GCM dq')
+    a2.plot(unpack(ypred_unscl, 'q')[ind, :], lev, label='pred dq')
+    a2.set_xlabel('g/kg/day')
+    a2.set_ylim(1, 0)
+    a2.legend()
+    f, (a1, a2) = plt.subplots(1, 2)
+    a1.plot(unpack(x_unscl, 'T')[ind, :].T, lev, label='input T [K]')
+    a1.set_ylim(1, 0)
+    q0 = unpack(x_unscl, 'q')[ind, :]*1000  # g/kg
+    dq = 20.*60.*unpack(ypred_unscl, 'q')[ind, :]/3600./24.  # g/kg/day -> g/kg
+    a2.plot(q0, lev, label='input q [kg/kg]')
+    a2.plot(q0 + dq, lev, label='q after')
+    a2.set_ylim(1, 0)
     plt.xlabel('g/kg')
     plt.legend()
     print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
     print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
-    xtoa, ytoa, _, _, _, _, _, _ = loaddata(datasource, minlev=0.,randseed=True)
-    print(sum(unpack(x_unscl,'q')<0.))
-    print(Ppred.shape)
-    # plt.figure()
-    # plt.scatter(ypred_unscl[:,10], ytrue_unscl[:,10])
-    # plt.savefig('/Users/jgdwyer/Desktop/foo.png')
-    # plt.figure()
-    # plt.plot(np.sort(ytrue_unscl[:,30] - ypred_unscl[:,30]))
-    # print(np.sum(np.abs(ytrue_unscl - ypred_unscl)))
-    # print(ytrue_unscl == ypred_unscl)
-    # print(ytrue_unscl.shape)
+    xtoa, ytoa, _, _, _, _, _, _ = loaddata(datasource, minlev=0.,
+                                            randseed=True)
