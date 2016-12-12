@@ -11,12 +11,12 @@ import pickle
 # over a 1000 day period. N_lon_samp represents different longitudes we look at
 # for a give longitude and time snapshot
 
-runname = 'neural_del1.2_abs1.0_T42_v4check'
+runname = 'neural_del1.2_abs1.0_T42_dbm1'
 
-time_beg = 2025  # 1025
-time_end = 2500  # 4000
-time_stp = 25
-file_days = np.arange(time_beg, time_end, time_stp)  # file_days = [1010]
+time_beg = 1010  # 1025
+time_end = 1010  # 4000
+time_stp = 10
+file_days = [1010] #np.arange(time_beg, time_end, time_stp)  # file_days = [1010]
 N_files = np.size(file_days)
 
 # Hardcoded values here
@@ -129,25 +129,25 @@ randind_vld = randinds[i90:]
 pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
              Tout[:, :, randind_trn], qout[:, :, randind_trn],
              Pout[:, randind_trn], lat],
-            open('./' + runname + '_conv_training_v3.pkl', 'wb'))
+            open('./' + runname + '_conv_training.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_tst], qin[:, :, randind_tst],
              Tout[:, :, randind_tst], qout[:, :, randind_tst],
              Pout[:, randind_tst], lat],
-            open('./' + runname + '_conv_testing_v3.pkl', 'wb'))
+            open('./' + runname + '_conv_testing.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_vld], qin[:, :, randind_vld],
              Tout[:, :, randind_vld], qout[:, :, randind_vld],
              Pout[:, randind_vld], lat],
-            open('./' + runname + '_conv_validation_v3.pkl', 'wb'))
+            open('./' + runname + '_conv_validation.pkl', 'wb'))
 # For convection + condensation learning
 pickle.dump([Tin[:, :, randind_trn], qin[:, :, randind_trn],
              Tout_all[:, :, randind_trn], qout_all[:, :, randind_trn],
              Pout_all[:, randind_trn], lat],
-            open('./' + runname + '_convcond_training_v3.pkl', 'wb'))
+            open('./' + runname + '_convcond_training.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_tst], qin[:, :, randind_tst],
              Tout_all[:, :, randind_tst], qout_all[:, :, randind_tst],
              Pout_all[:, randind_tst], lat],
-            open('./' + runname + '_convcond_testing_v3.pkl', 'wb'))
+            open('./' + runname + '_convcond_testing.pkl', 'wb'))
 pickle.dump([Tin[:, :, randind_vld], qin[:, :, randind_vld],
              Tout_all[:, :, randind_vld], qout_all[:, :, randind_vld],
              Pout_all[:, randind_vld], lat],
-            open('./' + runname + '_convcond_validation_v3.pkl', 'wb'))
+            open('./' + runname + '_convcond_validation.pkl', 'wb'))
