@@ -555,10 +555,15 @@ def meta_plot_regs():
     fig, ax = plt.subplots(len(neur_str), len(trn_ex))
     for i, neur_s in enumerate(neur_str):
         for j, trn_e in enumerate(trn_ex):
-            masks = np.isfinite(tr[i,j,:])
-            ax[i,j].semilogx(regs[masks], tr[i,j,masks], marker='o')
-            ax[i,j].semilogx(regs[masks], cv[i,j,masks], marker='o', color='green')
-            ax[i,j].set_title(neur_s + ' ' + str(trn_e))
+            masks = np.isfinite(tr[i, j, :])
+            ax[i, j].semilogx(regs[masks], tr[i, j, masks], marker='o')
+            ax[i, j].semilogx(regs[masks], cv[i, j, masks], marker='o', color='green')
+            ax[i, j].text(.2, .7, neur_s + ' ' + str(trn_e),
+                          transform=ax[i,j].transAxes)
+            ax[i, j].set_xlim(regs[0], regs[-1])
+            ax[i,j].get_xaxis().set_ticks([])
+            ax[i,j].get_yaxis().set_ticks([])
+    fig.savefig('./figs/NN_eval_vs_reg.eps', bbox_inches='tight')
             # if sum(np.isfinite(tr[i,j,:])) > 1:
     #             axcount = axcount + 1
     # fig, ax = plt.subplots(axcount, 1)
