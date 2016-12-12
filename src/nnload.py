@@ -3,6 +3,7 @@ from sklearn import preprocessing, metrics
 import scipy.stats
 import pickle
 import warnings
+from netCDF4 import Dataset
 
 
 def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
@@ -471,31 +472,74 @@ def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
     return mse
 
 
-def test_neural_fortran(ind):
+def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
+                         timeind=None):
+    f = Dataset(filename, mode='r')
+    # Files are time x lev x lat x lon
+    Tin = f.variables['t_intermed'][:]
+    qin = f.variables['q_intermed'][:]
+    Tout = f.variables['dt_tg_convection'][:]
+    qout = f.variables['dt_qg_convection'][:]
+    Pout = f.variables['convection_rain'][:]
+    Tout_dbm = f.variables['dt_tg_convection_dbm'][:]
+    qout_dbm = f.variables['dt_qg_convection_dbm'][:]
+    Pout_dbm = f.variables['convection_rain_dbm'][:]
+    f.close()
+    _, _, indlev = get_levs(minlev)
+    if latind == None:
+        latind = np.random.randint(0, Tin.shape[2])
+    if lonind == None:
+        lonind = np.random.randint(0, Tin.shape[3])
+    if timeind == None:
+        timeind = np.random.randint(0, Tin.shape[0])
+    Tin = np.squeeze(Tin[timeind, indlev, latind, lonind])
+    qin = np.squeeze(qin[timeind, indlev, latind, lonind])
+    Tout = np.squeeze(Tout[timeind, indlev, latind, lonind]) * 3600 * 24
+    qout = np.squeeze(qout[timeind, indlev, latind, lonind]) * 3600 * 24 * 1000
+    Pout = np.squeeze(Pout[timeind, latind, lonind]) * 3600 * 24
+    Tout_dbm = np.squeeze(Tout_dbm[timeind, indlev, latind, lonind])\
+        * 3600 * 24
+    qout_dbm = np.squeeze(qout_dbm[timeind, indlev, latind, lonind]) \
+        * 3600 * 24 * 1000
+    Pout_dbm = np.squeeze(Pout_dbm[timeind, latind, lonind]) * 3600 * 24
+    x = pack(Tin[:,None].T, qin[:,None].T)
+    y = pack(Tout[:,None].T, qout[:,None].T)
+    y_dbm = pack(Tout_dbm[:,None].T, qout_dbm[:,None].T)
+    return x, y, y_dbm, [Pout], [Pout_dbm]
+
+
+def test_neural_fortran(filename):
     mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
         'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
-    ds = './data/neural_del1.2_abs1.0_T42_v4check_conv_training_v3.pkl'
+    # ds = './data/neural_del1.2_abs1.0_T42_v3_conv_testing_v3.pkl'
+    # ds = './data/neural_del1.2_abs1.0_T42_v4check_conv_training_v3.pkl'
     # ds = './data/neural_del1.2_abs1.0_T42_v4weird_conv_training_v3.pkl'
-    x_unscl, ytrue_unscl, _, _, _, _, _, _ = loaddata(ds, minlev=min(lev),
-                                                      randseed=True)
+    ds = './data/neural_del1.2_abs1.0_T42_v4_spinup_conv_training.pkl'
+    # ds = './data/neural_del1.2_abs1.0_T42_dbm1_conv_training.pkl'
+    # x_unscl, ytrue_unscl, _, Ptrue, _, _, _, _ = loaddata(ds, minlev=min(lev),
+    #                                                       randseed=True)
+    x_unscl, ytrue_unscl, y_dbm_unscl, Ptrue, P_dbm = \
+        load_netcdf_onepoint(filename, min(lev), latind=44)
+    ind=0
     x_scl = transform_data(x_ppi, x_pp, x_unscl)
     ypred_scl = mlp.predict(x_scl)
     ypred_unscl = inverse_transform_data(y_ppi, y_pp, ypred_scl)
     import matplotlib.pyplot as plt
-
     import src.nnplot as nnplot
-    Ptrue = nnplot.calc_precip(ytrue_unscl, dlev)
+    # Ptrue = nnplot.calc_precip(ytrue_unscl, dlev)
     Ppred = nnplot.calc_precip(ypred_unscl, dlev)
     f, (a1, a2) = plt.subplots(1, 2)
     a1.plot(unpack(ytrue_unscl, 'T')[ind, :], lev, label='GCM dT')
-    a1.plot(unpack(ypred_unscl, 'T')[ind, :], lev, label='pred dT')
+    a1.plot(unpack(ypred_unscl, 'T')[ind, :], lev, label='NN dT')
+    a1.plot(unpack(y_dbm_unscl, 'T')[ind, :], lev, label='DBM dT')
     a1.set_xlabel('K/day')
     a1.set_ylim(1, 0)
     a1.legend()
     a2.plot(unpack(ytrue_unscl, 'q')[ind, :], lev, label='GCM dq')
-    a2.plot(unpack(ypred_unscl, 'q')[ind, :], lev, label='pred dq')
+    a2.plot(unpack(ypred_unscl, 'q')[ind, :], lev, label='NN dq')
+    a2.plot(unpack(y_dbm_unscl, 'q')[ind, :], lev, label='DBM dq')
     a2.set_xlabel('g/kg/day')
     a2.set_ylim(1, 0)
     a2.legend()
@@ -511,3 +555,4 @@ def test_neural_fortran(ind):
     plt.legend()
     print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
     print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
+    print('DBM Precip is: {:.2f}'.format(P_dbm[ind]))
