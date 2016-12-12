@@ -95,7 +95,8 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                                 n_stable=n_stable, n_iter=n_iter,
                                 learning_momentum=0.9, learning_rate=0.01,
                                 regularize=regularize,
-                                weight_decay=weight_decay)
+                                weight_decay=weight_decay,
+                                valid_size=0.2)
     if weight_precip:
         r_str = r_str + '_wpr'
     if weight_shallow:
