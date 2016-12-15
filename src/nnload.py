@@ -473,7 +473,7 @@ def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
 
 
 def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
-                         timeind=None):
+                         timeind=None, ensemble=False):
     f = Dataset(filename, mode='r')
     # Files are time x lev x lat x lon
     Tin = f.variables['t_intermed'][:]
@@ -484,6 +484,16 @@ def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
     Tout_dbm = f.variables['dt_tg_convection_dbm'][:]
     qout_dbm = f.variables['dt_qg_convection_dbm'][:]
     Pout_dbm = f.variables['convection_rain_dbm'][:]
+    # If requested loaded predictions from ensemble
+    ten = dict()  # initialize these regardless
+    qen = dict()
+    if ensemble:
+        tstr=['dt' + str(i) for i in range(10)]
+        qstr=['dq' + str(i) for i in range(10)]
+        for v in tstr:
+            ten[v] = f.variables[v][:]
+        for v in qstr:
+            qen[v] = f.variables[v][:]
     f.close()
     _, _, indlev = get_levs(minlev)
     if latind == None:
@@ -502,13 +512,19 @@ def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
     qout_dbm = np.squeeze(qout_dbm[timeind, indlev, latind, lonind]) \
         * 3600 * 24 * 1000
     Pout_dbm = np.squeeze(Pout_dbm[timeind, latind, lonind]) * 3600 * 24
+    for key in ten:
+        ten[key] = np.squeeze(ten[key][timeind, indlev, latind, lonind])\
+            * 3600 * 24
+    for key in qen:
+        qen[key] = np.squeeze(qen[key][timeind, indlev, latind, lonind])\
+            * 3600 * 24 * 1000
     x = pack(Tin[:,None].T, qin[:,None].T)
     y = pack(Tout[:,None].T, qout[:,None].T)
     y_dbm = pack(Tout_dbm[:,None].T, qout_dbm[:,None].T)
-    return x, y, y_dbm, [Pout], [Pout_dbm]
+    return x, y, y_dbm, [Pout], [Pout_dbm], ten, qen
 
 
-def test_neural_fortran(filename):
+def test_neural_fortran(filename, latind=None, timeind=None, ensemble=False):
     mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
         'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
@@ -520,9 +536,10 @@ def test_neural_fortran(filename):
     # ds = './data/neural_del1.2_abs1.0_T42_dbm1_conv_training.pkl'
     # x_unscl, ytrue_unscl, _, Ptrue, _, _, _, _ = loaddata(ds, minlev=min(lev),
     #                                                       randseed=True)
-    x_unscl, ytrue_unscl, y_dbm_unscl, Ptrue, P_dbm = \
-        load_netcdf_onepoint(filename, min(lev), latind=44)
-    ind=0
+    x_unscl, ytrue_unscl, y_dbm_unscl, Ptrue, P_dbm, ten, qen = \
+        load_netcdf_onepoint(filename, min(lev), latind=latind,
+                             timeind=timeind, ensemble=ensemble)
+    ind = 0
     x_scl = transform_data(x_ppi, x_pp, x_unscl)
     ypred_scl = mlp.predict(x_scl)
     ypred_unscl = inverse_transform_data(y_ppi, y_pp, ypred_scl)
@@ -534,15 +551,23 @@ def test_neural_fortran(filename):
     a1.plot(unpack(ytrue_unscl, 'T')[ind, :], lev, label='GCM dT')
     a1.plot(unpack(ypred_unscl, 'T')[ind, :], lev, label='NN dT')
     a1.plot(unpack(y_dbm_unscl, 'T')[ind, :], lev, label='DBM dT')
+    if ensemble:
+        for key in ten:
+            a1.plot(ten[key], lev, color='gray')
     a1.set_xlabel('K/day')
     a1.set_ylim(1, 0)
     a1.legend()
     a2.plot(unpack(ytrue_unscl, 'q')[ind, :], lev, label='GCM dq')
     a2.plot(unpack(ypred_unscl, 'q')[ind, :], lev, label='NN dq')
     a2.plot(unpack(y_dbm_unscl, 'q')[ind, :], lev, label='DBM dq')
+    if ensemble:
+        for key in qen:
+            a2.plot(qen[key], lev, color='gray')
     a2.set_xlabel('g/kg/day')
     a2.set_ylim(1, 0)
     a2.legend()
+    f.savefig('./figs/sampletest/out.png', bbox_inches='tight')
+    #Plot inputs
     f, (a1, a2) = plt.subplots(1, 2)
     a1.plot(unpack(x_unscl, 'T')[ind, :].T, lev, label='input T [K]')
     a1.set_ylim(1, 0)
@@ -556,3 +581,4 @@ def test_neural_fortran(filename):
     print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
     print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
     print('DBM Precip is: {:.2f}'.format(P_dbm[ind]))
+    f.savefig('./figs/sampletest/in.png', bbox_inches='tight')
