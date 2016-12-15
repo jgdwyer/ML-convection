@@ -153,10 +153,10 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
                                      learning_momentum=learning_momentum,
                                      regularize=regularize,
                                      weight_decay=weight_decay,
-                                    n_stable=n_stable,
-                                    valid_size=valid_size,
-                                    f_stable=f_stable,
-                                    callback={'on_epoch_finish': store_stats})
+                                     n_stable=n_stable,
+                                     valid_size=valid_size,
+                                     f_stable=f_stable,
+                                     callback={'on_epoch_finish': store_stats})
     if method == 'classify':
         layers.append(sknn.mlp.Layer("Softmax"))
         mlp = sknn_jgd.mlp.Classifier(layers,
@@ -266,81 +266,3 @@ def classify(classifier, x, y):
     x = x[ind, :]
     y = y[ind, :]
     return x, y
-
-def plot_classifier_hist(pred,y,tistr):
-    """Make histograms of the classification scores binned by the
-        'strength' of the convection
-    Inputs: pred  - predicted classification   (N_samples x 1)
-            y     - true T,q tendencies        (N_samples x N_features)
-            tistr - used as title and filename (str)"""
-    pred = np.squeeze(pred)
-    # Calculate convection strength and max it out at 100 for plotting purposes
-    conpower = np.sum(np.abs(unpack(y,'T')),axis=1)
-    maxbin=np.floor(.7*np.amax(conpower))
-    conpower = np.clip(conpower,0,maxbin)
-    # Calculate some overall statistics
-    both1 = np.sum( np.logical_and(pred >0, conpower >0) ) / np.sum(conpower >0)
-    both0 = np.sum( np.logical_and(pred==0, conpower==0) ) / np.sum(conpower==0)
-    pct_cnvct     = np.sum(conpower >0) / len(conpower)
-    pct_not_cnvct = np.sum(conpower==0) / len(conpower)
-    # Limit data to times when convection is really happening
-    ind = conpower>0
-    pred     = pred[ind]
-    conpower = conpower[ind]
-    # Plot figure
-    fig=plt.figure()
-    bins=np.linspace(0,maxbin,100)
-    plt.hist(conpower[pred==0],bins,label='wrong',alpha=0.5)
-    plt.hist(conpower[pred==1],bins,label='right',alpha=0.5)
-    plt.legend()
-    plt.title(tistr)
-    plt.xlabel('"Intensity" of Convection')
-    # Write overall statistics including how well we do at classifying when convection does not occur
-    plt.gca().text(.1,.5,'Classifier correctly predicts convection: %.1f%% of time (it convects %.1f%% of time)'
-                   %(100.*both1,100.*pct_cnvct    ),verticalalignment='bottom', horizontalalignment='left',transform=plt.gca().transAxes)
-    plt.gca().text(.1,.4,'Classifier correctly predicts no convection : %.1f%% of time (it does not convect  %.1f%% of time)'
-                   %(100.*both0,100.*pct_not_cnvct),verticalalignment='bottom', horizontalalignment='left',transform=plt.gca().transAxes)
-    plt.show()
-    fig.savefig(fig_dir + 'convection_classifier_%s.png' %(tistr),
-                bbox_inches='tight', dpi=450)
-
-def plot_roc_curve(mlp_list, mlp_str, X, y_true):
-    # For classifier
-    auroc_score = []
-    fig = plt.figure()
-    for ind, mlp in enumerate(mlp_list):
-        tp_probs = mlp.predict_proba(X)
-        tp_probs = tp_probs[:,1]
-        fpr, tpr, _ =      metrics.roc_curve(    y_true, tp_probs)
-        auroc_score.append(metrics.roc_auc_score(y_true, tp_probs))
-        plt.plot(fpr, tpr, label=mlp_str[ind])
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.legend(loc='lower right')
-    plt.show()
-    fig.savefig(fig_dir + 'classify_roc_curves.png',bbox_inches='tight',dpi=450)
-    return auroc_score
-
-def plot_classifier_metrics(mlp_list,mlp_str,X,y_true,auroc_score):
-    mcc = []
-    logloss = []
-    tick = np.arange(len(mlp_list))
-    for mlp in mlp_list:
-        y_pred = mlp.predict(X)
-        mcc.append(metrics.matthews_corrcoef(y_true, y_pred))
-        logloss.append(metrics.log_loss(     y_true, mlp.predict_proba(X)))
-    def do_plt(metric, ind, titlestr, mlp_str):
-        plt.subplot(1,3,ind)
-        plt.plot(metric, tick, marker = 'o')
-        if ind==1:
-            plt.yticks(tick, mlp_str)
-        else:
-            plt.setp(plt.gca().get_yticklabels(), visible=False)
-        plt.title(titlestr)
-        plt.tight_layout()
-    fig = plt.figure(102)
-    do_plt(mcc,         1, 'Matthews corr. coeff.', mlp_str)
-    do_plt(auroc_score, 2, 'Area under ROC curve' , mlp_str)
-    do_plt(logloss,     3, 'Cross-entropy Loss'   , mlp_str)
-    plt.show()
-    fig.savefig(fig_dir + 'classify_metrics.png',bbox_inches='tight',dpi=450)
