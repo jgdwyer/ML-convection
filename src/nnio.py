@@ -67,6 +67,85 @@ def write_netcdf_v4():
     ncfile.close()
 
 
+def write_netcdf_ensemble1():
+    ntrns = np.arange(125000, 125010)
+    base1 = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex'
+    base2 = '_r_50R_mom0.9reg1e-06_Niter3000_v3'
+    mlp_str = [base1 + str(ntrn) + base2 for ntrn in ntrns]
+    N_e = len(mlp_str)
+    datasource = './data/conv_training_v3.pkl'
+    # Set output filename
+    filename = '/Users/jgdwyer/neural_weights_ensemble1.nc'
+    # Load ANN and preprocessors
+    yscale_absmax = np.zeros((32, len(mlp_str)))
+    w1 = np.zeros((32, 50, N_e))
+    w2 = np.zeros((50, 32, N_e))
+    b1 = np.zeros((50, N_e))
+    b2 = np.zeros((32, N_e))
+    xscale_mean = np.zeros((32, N_e))
+    xscale_stnd = np.zeros((32, N_e))
+    yscale_absmax = np.zeros((32, N_e))
+
+    for i in range(len(mlp_str)):
+        mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
+            pickle.load(open('./data/regressors/' + mlp_str[i] + '.pkl', 'rb'))
+        # Need to transform some data for preprocessors to be able to export
+        # params
+        x_unscl, y_unscl, _, _, _, _, _, _ = nnload.loaddata(datasource,
+                                                             minlev=min(lev))
+        x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
+        y_scl = nnload.transform_data(y_ppi, y_pp, y_unscl)
+        # Also need to use the predict method to be able to export ANN params
+        _ = mlp.predict(x_scl)
+        # Grab weights and input normalization
+        w1[:,:,i] = mlp.get_parameters()[0].weights
+        w2[:,:,i] = mlp.get_parameters()[1].weights
+        b1[:,i] = mlp.get_parameters()[0].biases
+        b2[:,i] = mlp.get_parameters()[1].biases
+        xscale_mean[:,i] = x_pp.mean_
+        xscale_stnd[:,i] = x_pp.scale_
+        Nlev = len(lev)
+        yscale_absmax[:Nlev,i] = y_pp[0]
+        yscale_absmax[Nlev:,i] = y_pp[1]
+    # Write weights to file
+    ncfile = Dataset(filename, 'w')
+    # Write the dimensions
+    ncfile.createDimension('N_in', w1.shape[0])
+    ncfile.createDimension('N_h1', w1.shape[1])
+    ncfile.createDimension('N_out', w2.shape[1])
+    ncfile.createDimension('N_e', N_e)
+    # Create variable entries in the file
+    nc_w1 = ncfile.createVariable('w1', np.dtype('float64').char,
+                                  ( 'N_e','N_h1','N_in'))  # Reverse dims
+    nc_w2 = ncfile.createVariable('w2', np.dtype('float64').char,
+                                  ('N_e', 'N_out', 'N_h1'))
+    nc_b1 = ncfile.createVariable('b1', np.dtype('float64').char,
+                                  ('N_e', 'N_h1'))
+    nc_b2 = ncfile.createVariable('b2', np.dtype('float64').char,
+                                  ('N_e', 'N_out'))
+    nc_xscale_mean = ncfile.createVariable('xscale_mean',
+                                           np.dtype('float64').char,
+                                           ('N_e', 'N_in'))
+    nc_xscale_stnd = ncfile.createVariable('xscale_stnd',
+                                           np.dtype('float64').char,
+                                           ('N_e', 'N_in'))
+    nc_yscale_absmax = ncfile.createVariable('yscale_absmax',
+                                             np.dtype('float64').char,
+                                             ('N_e', 'N_out'))
+    # Write variables and close file - transpose because fortran reads it in
+    # "backwards"
+    nc_w1[:] = np.transpose(w1, (2, 1, 0))
+    nc_w2[:] = np.transpose(w2, (2, 1, 0))
+    nc_b1[:] = b1.T
+    nc_b2[:] = b2.T
+    nc_xscale_mean[:] = xscale_mean.T
+    nc_xscale_stnd[:] = xscale_stnd.T
+    nc_yscale_absmax[:] = yscale_absmax.T
+    # Write global file attributes
+    # ncfile.description = mlp_str
+    ncfile.close()
+
+
 def write_netcdf_convcond_v1():
     mlp_str = 'convcond_X-StandardScaler-qTindi_Y-SimpleY-qTindi_' +\
         'Ntrnex100000_r_100R_mom0.9reg1e-05_Niter10000_v3'
