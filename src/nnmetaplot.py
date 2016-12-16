@@ -1,5 +1,4 @@
 import numpy as np
-import pickle
 from sklearn import metrics
 import matplotlib.pyplot as plt
 import src.nnload as nnload

@@ -162,7 +162,7 @@ def write_netcdf_v4():
     x_unscl, y_unscl, _, _, _, _, _, _ = nnload.loaddata(datasource,
                                                          minlev=min(lev))
     x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
-    y_scl = nnload.transform_data(y_ppi, y_pp, y_unscl)
+    _ = nnload.transform_data(y_ppi, y_pp, y_unscl)
     # Also need to use the predict method to be able to export ANN params
     _ = mlp.predict(x_scl)
     # Grab weights and input normalization
