@@ -1,5 +1,6 @@
 import numpy as np
 import pickle
+from sklearn import metrics
 import matplotlib.pyplot as plt
 
 # ----  META-PLOTTING SCRIPTS  ---- #
@@ -190,3 +191,41 @@ def meta_plot_model_error_vs_training_examples():
     plt.ylabel('Error Rate')
     fig.savefig('./figs/' + r_str_save + 'error_history.png',
                 bbox_inches='tight', dpi=450)
+
+
+def plot_regressors_scores(r_list, r_str, x_test, y_true, fig_dir, txt):
+    """Given a list of fitted regressor objects, compare their skill on a
+    variety of tests"""
+    mse = []
+    r2_u = []
+    r2_w = []
+    exp_var_u = []
+    exp_var_w = []
+    for reg in r_list:
+        y_pred = reg.predict(x_test)
+        mse.append(metrics.mean_squared_error(y_true, y_pred,
+                                              multioutput='uniform_average'))
+        r2_u.append(metrics.r2_score(y_true, y_pred,
+                                     multioutput='uniform_average'))
+        r2_w.append(metrics.r2_score(y_true, y_pred,
+                                     multioutput='variance_weighted'))
+        expl = metrics.explained_variance_score
+        exp_var_u.append(expl(y_true, y_pred, multioutput='uniform_average'))
+        exp_var_w.append(expl(y_true, y_pred, multioutput='variance_weighted'))
+    fig = plt.figure()
+    plt.subplot(1, 2, 1)
+    tick = range(len(mse))
+    # Plot mean squared error
+    plt.yticks(tick, r_str)
+    plt.semilogx(mse, tick, marker='o',)
+    plt.title('Mean Squared Error')
+    # Plot R2
+    plt.subplot(1, 2, 2)
+    plt.plot(r2_u, tick, marker='o', label='uniform')
+    plt.plot(r2_w, tick, marker='o', label='weighted')
+    plt.setp(plt.gca().get_yticklabels(), visible=False)
+    plt.legend(loc="upper left")
+    plt.title('R^2 score')
+    plt.xlim((-1, 1))
+    fig.savefig(fig_dir + txt + '_scores.png', bbox_inches='tight', dpi=450)
+    plt.close()
