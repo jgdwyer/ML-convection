@@ -17,15 +17,15 @@ matplotlib.rcParams['agg.path.chunksize'] = 10000
 # ---   META PLOTTING SCRIPTS  --- #
 
 
-def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
+def plot_all_figs(r_str, training_file, validation=True, noshallow=False,
                   rainonly=False):
     # Open the neural network and the preprocessing scheme
     r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
-           pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
-    # Open the validation data set
-    x_unscl, ytrue_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata(datasource, minlev=min(lev), noshallow=noshallow,
-                        rainonly=rainonly)
+        pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+    # Load the data from the training/testing/validation file
+    x_scl, ypred_scl, ytrue_scl, x_unscl, ypred_unscl, ytrue_unscl = \
+        nnload.get_x_y_pred_true(r_str, training_file, minlev=min(lev),
+                                 noshallow=False, rainonly=False)
     # Set figure path and create directory if it does not exist
     figpath = './figs/' + r_str + '/'
     # If plotting on training data create a new subfolder
@@ -33,12 +33,6 @@ def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
         figpath = figpath + 'training_data/'
     if not os.path.exists(figpath):
         os.makedirs(figpath)
-    # Scale data using input scalers
-    x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
-    ytrue_scl = nnload.transform_data(y_ppi, y_pp, ytrue_unscl)
-    # Apply neural network to get predicted output
-    ypred_scl = r_mlp_eval.predict(x_scl)
-    ypred_unscl = nnload.inverse_transform_data(y_ppi, y_pp, ypred_scl)
     # Do plotting
     # Plot model errors over iteration history
     plot_model_error_over_time(errors, r_str, figpath)
@@ -63,7 +57,7 @@ def plot_all_figs(r_str, datasource, validation=True, noshallow=False,
     plot_sample_profiles(20, x_unscl, ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot mean, bias, rmse, r^2  (lat vs lev)
     make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
-                       datasource)
+                       training_file)
 
 
 def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,

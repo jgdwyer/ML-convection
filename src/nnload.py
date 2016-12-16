@@ -55,7 +55,7 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
     # Data to read in is N_lev x N_lat (SH & NH) x N_samples
     # Samples are quasi indpendent with only 5 from each latitude range chosen
     # randomly over different longitudes and times within that 24 hour period.
-    # Need to use encoding because saved using python2:
+    # Need to use encoding because saved using python2 on yellowstone:
     # http://stackoverflow.com/q/28218466
     v = dict()
     [v['Tin'], v['qin'], v['Tout'], v['qout'], Pout, lat] = \
@@ -257,26 +257,6 @@ def inverse_transform_data(ppi, pp, trans_data):
     return pack(T_data, q_data)
 
 
-def subsample(x, y, N_samples=0):
-    """Preprocess data by splitting it into 3 equally sized samples"""
-    if N_samples == 0:
-        N_samples = x.shape[0]
-    # Randomly choose samples
-    samples = np.random.choice(x.shape[0], N_samples, replace=False)
-    # Split data
-    ss = int(np.floor(len(samples)/3))  # number of samples in each set
-
-    def split_sample(z, samples, ss):
-        z1 = np.take(z, samples[0:ss], axis=0)
-        z2 = np.take(z, samples[ss:2*ss], axis=0)
-        z3 = np.take(z, samples[2*ss:3*ss], axis=0)
-        return z1, z2, z3
-    # Apply to input and output data
-    x1, x2, x3 = split_sample(x, samples, ss)
-    y1, y2, y3 = split_sample(y, samples, ss)
-    return x1, x2, x3, y1, y2, y3
-
-
 def limitrain(x, y, Pout, rainonly=False, noshallow=False, verbose=True):
     indrain = np.greater(Pout, 0)
     if verbose:
@@ -418,24 +398,27 @@ def get_levs(minlev):
     return lev, dlev, indlev
 
 
-def get_pred_true_from_mlp(r_str, minlev):
+def get_x_y_pred_true(r_str, training_file, minlev, noshallow=False,
+                      rainonly=False):
     # Load model and preprocessors
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, _ = \
         pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
     # Load raw data from file
-    x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
-        loaddata('./data/conv_testing_v3.pkl', minlev=minlev,
-                 N_trn_exs=None)
+    x_unscl, ytrue_unscl, _, _, _, _, _, _ = \
+        loaddata(training_file, minlev=minlev, N_trn_exs=None)
     # Scale true values
-    ytrue_scl = transform_data(y_ppi, y_pp, ytcv_unscl)
+    ytrue_scl = transform_data(y_ppi, y_pp, ytrue_unscl)
     # Apply x preprocessing to scale x-data and predict output
     x_scl = transform_data(x_ppi, x_pp, x_unscl)
     ypred_scl = mlp.predict(x_scl)
-    return ypred_scl, ytrue_scl
+    ypred_unscl = inverse_transform_data(y_ppi, y_pp, ypred_scl)
+    return x_scl, ypred_scl, ytrue_scl, x_unscl, ypred_unscl, ytrue_unscl
 
 
-
-
+def load_error_history(r_str):
+    _, _, err, _, _, _, _, _, _, _ = pickle.load('./data/regressors/' +
+                                                    r_str, 'rb'))
+    return err
 
 def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
                          timeind=None, ensemble=False):

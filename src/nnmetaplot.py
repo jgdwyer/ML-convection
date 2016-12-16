@@ -2,7 +2,7 @@ import numpy as np
 import pickle
 from sklearn import metrics
 import matplotlib.pyplot as plt
-
+import src.nnload as nnload
 # ----  META-PLOTTING SCRIPTS  ---- #
 
 
@@ -23,9 +23,7 @@ def load_r_mlps():
                 r_str = ptf + str(nex) + '_r_' + hid + \
                     '_mom0.9reg' + str(reg) + '_Niter10000_v3'
                 try:
-                    _, _, err, _, _, _, _, _, _, _ = \
-                        pickle.load(open('./data/regressors/' + r_str + '.pkl',
-                                         'rb'))
+                    err = nnload.load_error_history(r_str)
                     tr[i, j, k] = err[-1, 4]
                     cv[i, j, k] = err[-1, 2]
                 except FileNotFoundError:
@@ -121,24 +119,20 @@ def meta_compare_error_rate():
     e['test_L1_R1e-5'] = []
     e['train_L2_R1e-5'] = []
     e['test_L2_R1e-5'] = []
-    ptf = './data/regressors/X-StandardScaler-qTindi_Y-SimpleY-qTindi_r_'
+    ptf = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_r_'
     for h in hid_neur:
         hs = str(h)
-        _, _, e_load, _, _, _, _, _, _, _ = \
-            pickle.load(open(ptf + hs + 'R_mom0.9.pkl', 'rb'))
+        e_load = nnload.load_error_history(ptf + hs + 'R_mom0.9')
         e['train_L1_R0'].append(np.amin(e_load[-1, 1]))
         e['test_L1_R0'].append(np.amin(e_load[-1, 3]))
-        _, _, e_load, _, _, _, _, _, _, _ = \
-            pickle.load(open(ptf + hs + 'R_' + hs + 'R_mom0.9.pkl', 'rb'))
+        e_load = nnload.load_error_history(ptf + hs + 'R_' + hs + 'R_mom0.9')
         e['train_L2_R0'].append(np.amin(e_load[-1, 1]))
         e['test_L2_R0'].append(np.amin(e_load[-1, 3]))
-        _, _, e_load, _, _, _, _, _, _, _ = \
-            pickle.load(open(ptf + hs + 'R_mom0.9reg1e-05.pkl', 'rb'))
+        e_load = nnload.load_error_history(ptf + hs + 'R_mom0.9reg1e-05')
         e['train_L1_R1e-5'].append(np.amin(e_load[-1, 1]))
         e['test_L1_R1e-5'].append(np.amin(e_load[-1, 3]))
-        _, _, e_load, _, _, _, _, _, _, _ = \
-            pickle.load(open(ptf + hs + 'R_' + hs + 'R_mom0.9reg1e-05.pkl',
-                        'rb'))
+        e_load = nnload.load_error_history(ptf + hs + 'R_' + hs +
+                                           'R_mom0.9reg1e-05')
         e['train_L2_R1e-5'].append(np.amin(e_load[-1, 1]))
         e['test_L2_R1e-5'].append(np.amin(e_load[-1, 3]))
     fig, (ax1, ax2) = plt.subplots(1, 2)
@@ -175,8 +169,7 @@ def meta_plot_model_error_vs_training_examples():
     for n in n_samp:
         r_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex' + str(n) + \
                 '_r_60R_60R_mom0.9_Niter10000'
-        _, _, errors, _, _, _, _, _, _, _ = \
-            pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+        errors = nnload.load_error_history(r_str)
         err_trn.append(np.amin(errors[:, 0]))
         err_tst.append(np.amin(errors[:, 2]))
     fig = plt.figure()
