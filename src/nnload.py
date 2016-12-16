@@ -416,9 +416,10 @@ def get_x_y_pred_true(r_str, training_file, minlev, noshallow=False,
 
 
 def load_error_history(r_str):
-    _, _, err, _, _, _, _, _, _, _ = pickle.load('./data/regressors/' +
-                                                    r_str, 'rb'))
+    _, _, err, _, _, _, _, _, _, _ = pickle.load(open('./data/regressors/' +
+                                                      r_str, + 'pkl', 'rb'))
     return err
+
 
 def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
                          timeind=None, ensemble=False):
