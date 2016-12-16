@@ -43,7 +43,8 @@ contains
    subroutine neural_convection (dt, tin, qin, pfull, phalf,  &
                                   rain, tdel, qdel,  &
                                    r_w1, r_w2, r_b1, r_b2, &
-                               xscale_mean,xscale_stnd,yscale_absmax, raindebug, qdeldebug, &
+                               xscale_mean,xscale_stnd,yscale_absmax, conserve_energy_conv, &
+                               raindebug, qdeldebug, &
                                dt0, dt1, dt2, dt3, dt4, dt5, dt6, dt7, dt8, dt9, &
                                dq0, dq1, dq2, dq3, dq4, dq5, dq6, dq7, dq8, dq9)
 
@@ -70,6 +71,7 @@ contains
 
    real   , intent(in) , dimension(:,:,:) :: tin, qin, pfull, phalf
    real   , intent(in)                    :: dt
+   logical, intent(in)                    :: conserve_energy_conv
    real   , intent(out), dimension(:,:)   :: rain, raindebug
    real   , intent(out), dimension(:,:,:) :: tdel, qdel, qdeldebug, dt0, dt1, dt2, dt3
    real   , intent(out), dimension(:,:,:) :: dt4, dt5, dt6, dt7, dt8, dt9, dq0, dq1, dq2
@@ -214,6 +216,22 @@ contains
                  tdel(i,j,:) = 0.0
                  qdel(i,j,:) = 0.0
              endif
+! If we are conserving energy, do the below shift the temperature uniformly in the profile
+             if (conserve_energy_conv) then
+                deltak = 0.
+                do k=kx2ind, kx
+! Calculate the integrated difference in energy change within each level.
+                   deltak = deltak - (tdel(i,j,k) + hlv/cp_air*&
+                                     qdel(i,j,k))* &
+                                     (phalf(i,j,k+1) - phalf(i,j,k))
+                end do
+! Divide by pressure up to level we do convection of
+                deltak = deltak/(phalf(i,j,kx+1) - phalf(i,j,kx2ind))
+! Adjust the reference profile (uniformly with height), and correspondingly
+! the temperature change.
+                tdel(i,j,kx2ind:kx) = tdel(i,j,kx2ind:kx) + deltak
+             endif
+
           end do
        end do
        rain = precip

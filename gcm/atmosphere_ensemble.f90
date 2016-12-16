@@ -101,13 +101,14 @@ logical :: do_virtual = .false. ! whether virtual temp used in gcm_vert_diff
 logical :: lwet_convection = .false.
 logical :: neural_convection_flag = .false.
 logical :: neural_convcond_flag = .false.
+logical :: conserve_energy_conv = .false.
 logical :: two_stream = .true.
 logical :: mixed_layer_bc = .false.
 real :: roughness_heat = 0.05
 real :: roughness_moist = 0.05
 real :: roughness_mom = 0.05
 
-namelist/atmosphere_nml/ turb, ldry_convection, lwet_convection, neural_convection_flag, neural_convcond_flag, roughness_heat, two_stream, mixed_layer_bc, roughness_moist, roughness_mom, do_virtual
+namelist/atmosphere_nml/ turb, ldry_convection, lwet_convection, neural_convection_flag, neural_convcond_flag, conserve_energy_conv, roughness_heat, two_stream, mixed_layer_bc, roughness_moist, roughness_mom, do_virtual
 
 ! end CW addition
 
@@ -774,7 +775,8 @@ if (neural_convection_flag .or. neural_convcond_flag) then
                                                          p_half,  rain,          &
                                                      conv_dt_tg,  conv_dt_qg,       &
                                                          r_w1, r_w2, r_b1, r_b2, &
-                                                         xscale_mean, xscale_stnd, yscale_absmax, raindebug, conv_dt_qgdebug, &
+                                                         xscale_mean, xscale_stnd, yscale_absmax, &
+                                                         conserve_energy_conv, raindebug, conv_dt_qgdebug, &
                                                          dt0, dt1, dt2, dt3, dt4, dt5, dt6, dt7, dt8, dt9, &
                                                          dq0, dq1, dq2, dq3, dq4, dq5, dq6, dq7, dq8, dq9)
 
