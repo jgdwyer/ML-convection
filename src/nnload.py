@@ -13,12 +13,11 @@ def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
        the input filename is generated.
 
     Args:
-      filename:  The file to be loaded. Use './data/convcond_training_v3.pkl'
-                 or './data/convcond_testing_v3.pkl'
+      filename:  The file to be loaded. e.g., './data/convcond_training_v3.pkl'
       minlev:    The topmost model level for which to load data. Set to 0. to
                  load all data
       all_lats:  Logical value for whether to load data from all latitudes
-      indlat:    If all_lats is false, give the index value [0-31] for the
+      indlat:    If all_lats is false, give the index value [0-63] for the
                  latitude at which to load data.
       N_trn_exs: Number of training examples to load. If set to None, or
                  if requested number exceeds max available will load all.
