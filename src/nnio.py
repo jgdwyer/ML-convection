@@ -1,4 +1,5 @@
 import src.nnload as nnload
+import src.nnatmos as nnatmos
 from netCDF4 import Dataset
 import numpy as np
 import pickle
@@ -98,15 +99,15 @@ def write_netcdf_ensemble1():
         # Also need to use the predict method to be able to export ANN params
         _ = mlp.predict(x_scl)
         # Grab weights and input normalization
-        w1[:,:,i] = mlp.get_parameters()[0].weights
-        w2[:,:,i] = mlp.get_parameters()[1].weights
-        b1[:,i] = mlp.get_parameters()[0].biases
-        b2[:,i] = mlp.get_parameters()[1].biases
-        xscale_mean[:,i] = x_pp.mean_
-        xscale_stnd[:,i] = x_pp.scale_
+        w1[:, :, i] = mlp.get_parameters()[0].weights
+        w2[:, :, i] = mlp.get_parameters()[1].weights
+        b1[:, i] = mlp.get_parameters()[0].biases
+        b2[:, i] = mlp.get_parameters()[1].biases
+        xscale_mean[:, i] = x_pp.mean_
+        xscale_stnd[:, i] = x_pp.scale_
         Nlev = len(lev)
-        yscale_absmax[:Nlev,i] = y_pp[0]
-        yscale_absmax[Nlev:,i] = y_pp[1]
+        yscale_absmax[:Nlev, i] = y_pp[0]
+        yscale_absmax[Nlev:, i] = y_pp[1]
     # Write weights to file
     ncfile = Dataset(filename, 'w')
     # Write the dimensions
@@ -115,8 +116,9 @@ def write_netcdf_ensemble1():
     ncfile.createDimension('N_out', w2.shape[1])
     ncfile.createDimension('N_e', N_e)
     # Create variable entries in the file
+    # Variables need to "reversed" to be read in by Fortran GCM code
     nc_w1 = ncfile.createVariable('w1', np.dtype('float64').char,
-                                  ( 'N_e','N_h1','N_in'))  # Reverse dims
+                                  ('N_e', 'N_h1', 'N_in'))
     nc_w2 = ncfile.createVariable('w2', np.dtype('float64').char,
                                   ('N_e', 'N_out', 'N_h1'))
     nc_b1 = ncfile.createVariable('b1', np.dtype('float64').char,
@@ -141,8 +143,6 @@ def write_netcdf_ensemble1():
     nc_xscale_mean[:] = xscale_mean.T
     nc_xscale_stnd[:] = xscale_stnd.T
     nc_yscale_absmax[:] = yscale_absmax.T
-    # Write global file attributes
-    # ncfile.description = mlp_str
     ncfile.close()
 
 
@@ -253,3 +253,44 @@ def verify_netcdf_weights():
     yps = r_mlp_eval.predict(xs)
     print('Difference between predicted tendencies: {:.1f}'.
           format(np.sum(np.abs(yps - yps_byhand))))
+
+
+def compare_convcond_prediction(cv_str, cvcd_str, minlev):
+    cv_mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, _ = \
+        pickle.load(open('./data/regressors/' + cv_str + '.pkl', 'rb'))
+    cvcd_mlp, _, errors, x_ppi_check, y_ppi_check, x_pp, y_pp, lat, lev, _ = \
+        pickle.load(open('./data/regressors/' + cvcd_str + '.pkl', 'rb'))
+    # Check that preprocessers are the same
+    if ((x_ppi != x_ppi_check) or (y_ppi != y_ppi_check)):
+        raise ValueError('Preprocessing schemes different for conv only and ' +
+                         'conv+cond! This means that comparing the two in ' +
+                         'scaled space may give different results')
+    # Load data
+    x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
+        nnload.loaddata('./data/conv_testing_v3.pkl', minlev=minlev,
+                        N_trn_exs=10000, randseed=True)
+    xcvcd_unscl, ytcvcd_unscl, _, _, _, _, _, _ = \
+        nnload.loaddata('./data/convcond_testing_v3.pkl', minlev=minlev,
+                        N_trn_exs=10000, randseed=True)
+    # Check that x values are the same to make sure random seeds are same
+    if np.sum(np.abs(x_unscl - xcvcd_unscl)) > 0.0:
+        raise ValueError('Data loaded in different order!')
+    # Convert true y-values to scaled by applying an inverse transformation
+    ytcv_scl = nnload.transform_data(y_ppi, y_pp, ytcv_unscl)
+    ytcvcd_scl = nnload.transform_data(y_ppi, y_pp, ytcvcd_unscl)
+    # Derived true y-values for cond only
+    ytcd_scl = ytcvcd_scl - ytcvcd_scl
+    # Calculate predicted y values for conv and convcond
+    ypcv_scl = cv_mlp.predict(x_scl)
+    ypcvcd_scl = cvcd_mlp.predict(x_scl)
+    # Add true cond values to ycv_true and ycv_pred
+    v = 'q'
+    mse_cvcd_predictboth = nnload.calc_mse(nnload.unpack(ypcvcd_scl, v),
+                                           nnload.unpack(ytcvcd_scl, v),
+                                           relflag=True)
+    mse_cv = nnload.calc_mse(nnload.unpack(ypcv_scl, v),
+                             nnload.unpack(ytcv_scl, v), relflag=True)
+    print('MSE predicting convection and condensation in one step: {:.5f}'.
+          format(mse_cvcd_predictboth))
+    print('MSE predicting convection only (no condensation): {:.5f}'.
+          format(mse_cv))

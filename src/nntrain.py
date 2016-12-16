@@ -1,7 +1,6 @@
 import numpy as np
 import sknn_jgd.mlp
 import time
-from sklearn import metrics
 from sklearn.ensemble import RandomForestRegressor
 import src.nnload as nnload
 import pickle
@@ -140,7 +139,8 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
     # First build layers
     actv_fnc = num_layers*[actv_fnc]
     hid_neur = num_layers*[hid_neur]
-    layers = [sknn_jgd.mlp.Layer(f, units=h) for f, h in zip(actv_fnc, hid_neur)]
+    layers = [sknn_jgd.mlp.Layer(f, units=h) for f, h in zip(actv_fnc,
+                                                             hid_neur)]
     # Append a linear output layer if regressing and a softmax layer if
     # classifying
     if method == 'regress':
@@ -158,7 +158,7 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
                                      f_stable=f_stable,
                                      callback={'on_epoch_finish': store_stats})
     if method == 'classify':
-        layers.append(sknn.mlp.Layer("Softmax"))
+        layers.append(sknn_jgd.mlp.Layer("Softmax"))
         mlp = sknn_jgd.mlp.Classifier(layers,
                                       n_iter=n_iter,
                                       batch_size=batch_size,
@@ -209,50 +209,6 @@ def train_nn(mlp, mlp_str, x, y, w=None):
     errors = np.asarray(errors_stored)
     # Return the fitted models and the scores
     return mlp, errors
-
-
-# ---  EVALUATING NEURAL NETS  --- #
-
-
-
-
-def compare_convcond_prediction(cv_str, cvcd_str, minlev):
-    cv_mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, _ = \
-        pickle.load(open('./data/regressors/' + cv_str + '.pkl', 'rb'))
-    cvcd_mlp, _, errors, x_ppi_check, y_ppi_check, x_pp, y_pp, lat, lev, _ = \
-        pickle.load(open('./data/regressors/' + cvcd_str + '.pkl', 'rb'))
-    # Check that preprocessers are the same
-    if ((x_ppi != x_ppi_check) or (y_ppi != y_ppi_check)):
-        raise ValueError('Preprocessing schemes different for conv only and ' +
-                         'conv+cond!')
-    # Load data
-    x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata('./data/conv_testing_v3.pkl', minlev=minlev,
-                        N_trn_exs=10000, randseed=True)
-    xcvcd_unscl, ytcvcd_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata('./data/convcond_testing_v3.pkl', minlev=minlev,
-                        N_trn_exs=10000, randseed=True)
-    # Check that x values are the same to make sure random seeds are same
-    if np.sum(np.abs(x_unscl - xcvcd_unscl)) > 0.0:
-        raise ValueError('Data loaded in different order!')
-    # Convert true y-values to scaled by applying an inverse transformation
-    ytcv_scl = nnload.transform_data(y_ppi, y_pp, ytcv_unscl)
-    ytcvcd_scl = nnload.transform_data(y_ppi, y_pp, ytcvcd_unscl)
-    # Derived true y-values for cond only
-    ytcd_scl = ytcvcd_scl - ytcvcd_scl
-
-    # Calculate predicted y values for conv and convcond
-    ypcv_scl = cv_mlp.predict(x_scl)
-    ypcvcd_scl = cvcd_mlp.predict(x_scl)
-    # Add true cond values to ycv_true and ycv_pred
-    v = 'q'
-    mse_cvcd_predictboth = calc_mse(nnload.unpack(ypcvcd_scl, v), nnload.unpack(ytcvcd_scl, v), relflag=True)
-    mse_cv = calc_mse(nnload.unpack(ypcv_scl, v), nnload.unpack(ytcv_scl, v), relflag=True)
-    print('MSE predicting convection and condensation in one step: {:.5f}'.
-          format(mse_cvcd_predictboth))
-    print('MSE predicting convection only (no condensation): {:.5f}'.
-          format(mse_cv))
-    # Calculate MSE for both types
 
 
 def classify(classifier, x, y):

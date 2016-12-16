@@ -434,42 +434,7 @@ def get_pred_true_from_mlp(r_str, minlev):
     return ypred_scl, ytrue_scl
 
 
-def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
-    """Calculates the mean squared error for scaled outputs and is taken over
-       all training examples and levels of T and q
-       Args:
-        y_pred (float: Nex x N_lev*2): Scaled predicted value of output
-        y_true (float Nex x N_lev*2): Scaled true value of output
-        relflag (bool): Divide by standard deviation for each var at each lev
-                        to somewhat account for difference in strength between
-                        convection-only and conv+cond predictions
-        minlev (float): Don't consider data above this level when calculating
-                        mse
-        lev (float: N_lev): Used for calculating minlev
-       Returns:
-        mse (float, scalar): Mean-Squared error """
-    # If requested cut off certain levels
-    if minlev is not None:
-        if lev is None:
-            raise ValueError('Also need to input levels!')
-        indlev = np.greater_equal(lev, minlev)
-        # For predicted data
-        Tp = unpack(y_pred, 'T')[:, indlev]
-        qp = unpack(y_pred, 'q')[:, indlev]
-        y_pred = pack(Tp, qp)
-        # For true data
-        Tt = unpack(y_true, 'T')[:, indlev]
-        qt = unpack(y_true, 'q')[:, indlev]
-        y_true = pack(Tt, qt)
-    # Calculate squared difference
-    mse = np.square(y_pred - y_true)
-    # If looking at relative mean squared error divide by the mean over all
-    # examples for each variable and at each level
-    if relflag:
-        mse = mse/np.abs(np.std(y_true, axis=1))[:, None]
-    # Now take mean value over flattened array for all values
-    mse = np.mean(mse[np.isfinite(mse)])
-    return mse
+
 
 
 def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
@@ -488,19 +453,19 @@ def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
     ten = dict()  # initialize these regardless
     qen = dict()
     if ensemble:
-        tstr=['dt' + str(i) for i in range(10)]
-        qstr=['dq' + str(i) for i in range(10)]
+        tstr = ['dt' + str(i) for i in range(10)]
+        qstr = ['dq' + str(i) for i in range(10)]
         for v in tstr:
             ten[v] = f.variables[v][:]
         for v in qstr:
             qen[v] = f.variables[v][:]
     f.close()
     _, _, indlev = get_levs(minlev)
-    if latind == None:
+    if latind is None:
         latind = np.random.randint(0, Tin.shape[2])
-    if lonind == None:
+    if lonind is None:
         lonind = np.random.randint(0, Tin.shape[3])
-    if timeind == None:
+    if timeind is None:
         timeind = np.random.randint(0, Tin.shape[0])
     Tin = np.squeeze(Tin[timeind, indlev, latind, lonind])
     qin = np.squeeze(qin[timeind, indlev, latind, lonind])
@@ -518,67 +483,7 @@ def load_netcdf_onepoint(filename, minlev, latind=None, lonind=None,
     for key in qen:
         qen[key] = np.squeeze(qen[key][timeind, indlev, latind, lonind])\
             * 3600 * 24 * 1000
-    x = pack(Tin[:,None].T, qin[:,None].T)
-    y = pack(Tout[:,None].T, qout[:,None].T)
-    y_dbm = pack(Tout_dbm[:,None].T, qout_dbm[:,None].T)
+    x = pack(Tin[:, None].T, qin[:, None].T)
+    y = pack(Tout[:, None].T, qout[:, None].T)
+    y_dbm = pack(Tout_dbm[:, None].T, qout_dbm[:, None].T)
     return x, y, y_dbm, [Pout], [Pout_dbm], ten, qen
-
-
-def test_neural_fortran(filename, latind=None, timeind=None, ensemble=False):
-    mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
-        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
-    mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
-        pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
-    # ds = './data/neural_del1.2_abs1.0_T42_v3_conv_testing_v3.pkl'
-    # ds = './data/neural_del1.2_abs1.0_T42_v4check_conv_training_v3.pkl'
-    # ds = './data/neural_del1.2_abs1.0_T42_v4weird_conv_training_v3.pkl'
-    ds = './data/neural_del1.2_abs1.0_T42_v4_spinup_conv_training.pkl'
-    # ds = './data/neural_del1.2_abs1.0_T42_dbm1_conv_training.pkl'
-    # x_unscl, ytrue_unscl, _, Ptrue, _, _, _, _ = loaddata(ds, minlev=min(lev),
-    #                                                       randseed=True)
-    x_unscl, ytrue_unscl, y_dbm_unscl, Ptrue, P_dbm, ten, qen = \
-        load_netcdf_onepoint(filename, min(lev), latind=latind,
-                             timeind=timeind, ensemble=ensemble)
-    ind = 0
-    x_scl = transform_data(x_ppi, x_pp, x_unscl)
-    ypred_scl = mlp.predict(x_scl)
-    ypred_unscl = inverse_transform_data(y_ppi, y_pp, ypred_scl)
-    import matplotlib.pyplot as plt
-    import src.nnplot as nnplot
-    # Ptrue = nnplot.calc_precip(ytrue_unscl, dlev)
-    Ppred = nnplot.calc_precip(ypred_unscl, dlev)
-    f, (a1, a2) = plt.subplots(1, 2)
-    a1.plot(unpack(ytrue_unscl, 'T')[ind, :], lev, label='GCM dT')
-    a1.plot(unpack(ypred_unscl, 'T')[ind, :], lev, label='NN dT')
-    a1.plot(unpack(y_dbm_unscl, 'T')[ind, :], lev, label='DBM dT')
-    if ensemble:
-        for key in ten:
-            a1.plot(ten[key], lev, color='gray')
-    a1.set_xlabel('K/day')
-    a1.set_ylim(1, 0)
-    a1.legend()
-    a2.plot(unpack(ytrue_unscl, 'q')[ind, :], lev, label='GCM dq')
-    a2.plot(unpack(ypred_unscl, 'q')[ind, :], lev, label='NN dq')
-    a2.plot(unpack(y_dbm_unscl, 'q')[ind, :], lev, label='DBM dq')
-    if ensemble:
-        for key in qen:
-            a2.plot(qen[key], lev, color='gray')
-    a2.set_xlabel('g/kg/day')
-    a2.set_ylim(1, 0)
-    a2.legend()
-    f.savefig('./figs/sampletest/out.png', bbox_inches='tight')
-    #Plot inputs
-    f, (a1, a2) = plt.subplots(1, 2)
-    a1.plot(unpack(x_unscl, 'T')[ind, :].T, lev, label='input T [K]')
-    a1.set_ylim(1, 0)
-    q0 = unpack(x_unscl, 'q')[ind, :]*1000  # g/kg
-    dq = 20.*60.*unpack(ypred_unscl, 'q')[ind, :]/3600./24.  # g/kg/day -> g/kg
-    a2.plot(q0, lev, label='input q [kg/kg]')
-    a2.plot(q0 + dq, lev, label='q after')
-    a2.set_ylim(1, 0)
-    plt.xlabel('g/kg')
-    plt.legend()
-    print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
-    print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
-    print('DBM Precip is: {:.2f}'.format(P_dbm[ind]))
-    f.savefig('./figs/sampletest/in.png', bbox_inches='tight')

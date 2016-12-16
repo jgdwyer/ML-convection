@@ -4,6 +4,7 @@ import matplotlib.gridspec as gridspec
 matplotlib.use('Agg')  # so figs just print to file. Needs to come before mpl
 import matplotlib.pyplot as plt
 import src.nnload as nnload
+import src.nnatmos as nnatmos
 import scipy.stats
 from sklearn import metrics, preprocessing
 import pickle
@@ -166,8 +167,8 @@ def plot_precip(y3_true, y3_pred, dlev, figpath):
 # Plot a scatter plot of true vs predicted for some variable
 def plot_scatter(ytrue_unscl, ypred_unscl, lev, dlev, figpath):
     # Plot scatter of precipitation
-    P_true = calc_precip(ytrue_unscl, dlev)
-    P_pred = calc_precip(ypred_unscl, dlev)
+    P_true = nnatmos.calc_precip(unpack(ytrue_unscl, 'q'), dlev)
+    P_pred = nnatmos.calc_precip(unpack(ypred_unscl, 'q'), dlev)
     f = plt.figure()
     _plot_scatter(plt.gca(), P_true, P_pred, titstr='Precipitation Rate [mm/day]')
     Plessthan0 = sum(P_pred < 0.0)
@@ -280,14 +281,14 @@ def plot_expl_var(y_true,y_pred,vari,lev, label=None):
     plt.title('Explained Variance Regression Score')
 
 def _plot_enthalpy(y, dlev, label=None):
-    k = calc_enthalpy(y, dlev)
+    k = nnatmos.calc_enthalpy(unpack(y, 'T'), unpack(y, 'q'), dlev)
     n, bins, patches = plt.hist(k, 50, alpha=0.5,label=label) #, facecolor='green'
     plt.title('Heating rate needed to conserve column enthalpy')
     plt.xlabel('K/day over column')
 
 def _plot_precip(y_true, y_pred, dlev):
-    y_true = calc_precip(y_true, dlev)
-    y_pred = calc_precip(y_pred, dlev)
+    y_true = nnatmos.calc_precip(unpack(y_true, 'q'), dlev)
+    y_pred = nnatmos.calc_precip(unpack(y_pred, 'q'), dlev)
     ind = y_true.argsort()
     plt.plot(y_true[ind], label='actual')
     plt.plot(y_pred[ind], alpha=0.6, label='predict')
@@ -425,7 +426,7 @@ def plot_sample_profile(x, y_true, y_pred, lev, filename=None):
     #f, (ax1, ax2, ax3) = plt.subplots(1, 3)
     T = nnload.unpack(x, 'T', axis=0)
     q = nnload.unpack(x, 'q', axis=0)
-    theta = calc_theta(T, lev)
+    theta = nnatmos.calc_theta(T, lev)
     # Plot input temperature profile
     ax1.plot(theta, lev)
     ax1.set_ylim(1, 0.25)
@@ -455,6 +456,7 @@ def plot_sample_profile(x, y_true, y_pred, lev, filename=None):
         f.savefig(filename, bbox_inches='tight', dpi=450)
     plt.close()
 
+
 def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
         """Plots the vertical profiles of input T & q and predicted and true output tendencies"""
         f = plt.figure()
@@ -465,8 +467,8 @@ def plot_sample_profile_v2(x, y_true, y_pred, lev, filename=None):
         #f, (ax1, ax2, ax3) = plt.subplots(1, 3)
         T = nnload.unpack(x, 'T', axis=0)
         q = nnload.unpack(x, 'q', axis=0)
-        theta = calc_theta(T, lev)
-        theta_e = calc_theta_e(T, theta, q)
+        theta = nnatmos.calc_theta(T, lev)
+        theta_e = nnatmos.calc_theta_e(T, theta, q)
         theta_e_ns = theta_e[-2]*np.ones(lev.shape)
         # Plot input temperature profile
         ax1.plot(theta, lev, label=r'$\theta$')
@@ -519,6 +521,58 @@ def plot_model_error_over_time(errors, mlp_str, fig_dir):
     plt.xlabel('Iteration Number')
     fig.savefig(fig_dir + 'error_history.png', bbox_inches='tight', dpi=450)
     plt.close()
+
+
+def plot_neural_fortran(training_file, mlp_str, latind=None, timeind=None,
+                        ensemble=False):
+    mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
+        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
+    mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
+        pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
+    x_unscl, ytrue_unscl, y_dbm_unscl, Ptrue, P_dbm, ten, qen = \
+        nnload.load_netcdf_onepoint(training_file, min(lev), latind=latind,
+                                    timeind=timeind, ensemble=ensemble)
+    ind = 0
+    x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
+    ypred_scl = mlp.predict(x_scl)
+    ypred_unscl = nnload.inverse_transform_data(y_ppi, y_pp, ypred_scl)
+    Ppred = nnatmos.calc_precip(nnload.unpack(ypred_unscl, 'q'), dlev)
+    f, (a1, a2) = plt.subplots(1, 2)
+    a1.plot(nnload.unpack(ytrue_unscl, 'T')[ind, :], lev, label='GCM dT')
+    a1.plot(nnload.unpack(ypred_unscl, 'T')[ind, :], lev, label='NN dT')
+    a1.plot(nnload.unpack(y_dbm_unscl, 'T')[ind, :], lev, label='DBM dT')
+    if ensemble:
+        for key in ten:
+            a1.plot(ten[key], lev, color='gray')
+    a1.set_xlabel('K/day')
+    a1.set_ylim(1, 0)
+    a1.legend()
+    a2.plot(nnload.unpack(ytrue_unscl, 'q')[ind, :], lev, label='GCM dq')
+    a2.plot(nnload.unpack(ypred_unscl, 'q')[ind, :], lev, label='NN dq')
+    a2.plot(nnload.unpack(y_dbm_unscl, 'q')[ind, :], lev, label='DBM dq')
+    if ensemble:
+        for key in qen:
+            a2.plot(qen[key], lev, color='gray')
+    a2.set_xlabel('g/kg/day')
+    a2.set_ylim(1, 0)
+    a2.legend()
+    f.savefig('./figs/sampletest/out.png', bbox_inches='tight')
+    # Plot inputs
+    f, (a1, a2) = plt.subplots(1, 2)
+    a1.plot(nnload.unpack(x_unscl, 'T')[ind, :].T, lev, label='input T [K]')
+    a1.set_ylim(1, 0)
+    q0 = nnload.unpack(x_unscl, 'q')[ind, :]*1000  # now g/kg
+    time_step = 20*60
+    dq = nnload.unpack(ypred_unscl, 'q')[ind, :]*time_step/3600/24  # now g/kg
+    a2.plot(q0, lev, label='input q [kg/kg]')
+    a2.plot(q0 + dq, lev, label='q after')
+    a2.set_ylim(1, 0)
+    plt.xlabel('g/kg')
+    plt.legend()
+    print('GCM Precip is: {:.2f}'.format(Ptrue[ind]))
+    print('MLP Precip is: {:.2f}'.format(Ppred[ind]))
+    print('DBM Precip is: {:.2f}'.format(P_dbm[ind]))
+    f.savefig('./figs/sampletest/in.png', bbox_inches='tight')
 
 
 # ----  META-PLOTTING SCRIPTS  ---- #
@@ -683,11 +737,12 @@ def meta_compare_error_rate():
     ax2.legend(loc='upper right')
     ax2.set_title('Error Rate (with regularization)')
     plt.show()
-    fig.savefig('./figs/Compare_error_rate_vs_hid_neur.png',bbox_inches='tight',
-                dpi=450)
+    fig.savefig('./figs/Compare_error_rate_vs_hid_neur.png',
+                bbox_inches='tight', dpi=450)
+
 
 def meta_plot_model_error_vs_training_examples():
-    n_samp = np.array([100,200,500,1000,2000,3500,5000,7500,10000,12500,15000])
+    n_samp = np.array([100, 200, 500, 1000, 2000, 3500, 5000, 7500, 10000, 12500,15000])
     err_trn = []
     err_tst = []
     # Load data for each sample
@@ -695,9 +750,9 @@ def meta_plot_model_error_vs_training_examples():
         r_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_Ntrnex' + str(n) + \
                 '_r_60R_60R_mom0.9_Niter10000'
         _, _, errors, _, _, _, _, _, _, _ = \
-               pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
-        err_trn.append(np.amin(errors[:,0]))
-        err_tst.append(np.amin(errors[:,2]))
+            pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
+        err_trn.append(np.amin(errors[:, 0]))
+        err_tst.append(np.amin(errors[:, 2]))
     fig = plt.figure()
     n_samp = n_samp / 2. # we are doing a 50-50 split for train & cross-validat
     plt.plot(n_samp, err_trn, label='Train')
@@ -708,47 +763,46 @@ def meta_plot_model_error_vs_training_examples():
     plt.title('Error Rate for ' + r_str_save)
     plt.xlabel('Number of training examples')
     plt.ylabel('Error Rate')
-    fig.savefig('./figs/' + r_str_save + 'error_history.png', bbox_inches='tight',
-                dpi=450)
-
-# ----  HELPER SCRIPTS  ---- #
+    fig.savefig('./figs/' + r_str_save + 'error_history.png',
+                bbox_inches='tight', dpi=450)
 
 
-def calc_enthalpy(y, dlev):
-    # y is output data set in rate (1/day)
-    # k is the implied uniform heating rate over the whole column to correct the imbalance
-    cp = 1005. #J/kg/K
-    L = 2.5e6 #J/kg
-    k = (unpack(y, 'T') + (L/cp) * unpack(y, 'q')/1000.)
-    k = vertical_integral(k, dlev)
-    k = k / 1e5
-    return k
-
-
-def vertical_integral(data, dlev):
-    g = 9.8 #m/s2
-    data = -1./g * np.sum(data * dlev[:,None].T, axis=1)*1e5
-    return data
-
-
-def calc_precip(y, dlev):
-    y = unpack(y, 'q')
-    y = y / 1000. # kg/kg/day
-    return vertical_integral(y, dlev) #mm/day
-
-
-def calc_theta(T, sigma):
-    kappa = 287./1005.
-    theta = T * np.power(1. / sigma, kappa)
-    return theta
-
-
-def calc_theta_e(T, theta, q):
-    L = 2.5e6
-    Cp = 1005
-    theta_e = theta * np.exp(L * q / Cp / T)
-    return theta_e
-
+def calc_mse_simple(y_pred, y_true, relflag=False, minlev=None, lev=None):
+    """Calculates the mean squared error for scaled outputs and is taken over
+       all training examples and levels of T and q
+       Args:
+        y_pred (float: Nex x N_lev*2): Scaled predicted value of output
+        y_true (float Nex x N_lev*2): Scaled true value of output
+        relflag (bool): Divide by standard deviation for each var at each lev
+                        to somewhat account for difference in strength between
+                        convection-only and conv+cond predictions
+        minlev (float): Don't consider data above this level when calculating
+                        mse
+        lev (float: N_lev): Used for calculating minlev
+       Returns:
+        mse (float, scalar): Mean-Squared error """
+    # If requested cut off certain levels
+    if minlev is not None:
+        if lev is None:
+            raise ValueError('Also need to input levels!')
+        indlev = np.greater_equal(lev, minlev)
+        # For predicted data
+        Tp = unpack(y_pred, 'T')[:, indlev]
+        qp = unpack(y_pred, 'q')[:, indlev]
+        y_pred = pack(Tp, qp)
+        # For true data
+        Tt = unpack(y_true, 'T')[:, indlev]
+        qt = unpack(y_true, 'q')[:, indlev]
+        y_true = pack(Tt, qt)
+    # Calculate squared difference
+    mse = np.square(y_pred - y_true)
+    # If looking at relative mean squared error divide by the mean over all
+    # examples for each variable and at each level
+    if relflag:
+        mse = mse/np.abs(np.std(y_true, axis=1))[:, None]
+    # Now take mean value over flattened array for all values
+    mse = np.mean(mse[np.isfinite(mse)])
+    return mse
 
 # ---  CLASSIFICATION METRICS (currently not in use)  --- #
 
