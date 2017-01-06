@@ -386,30 +386,29 @@ def plot_sample_profiles(num_prof, x, ytrue, ypred, lev, figpath, samp=None):
     for i in range(num_prof):
         if samp is None:
             samp = np.random.randint(0, x.shape[0])
-        sample_filename = figpath + '/samples/' + str(samp) + '.png'
+        sample_filename = figpath + '/samples/' + str(samp) + '.eps'
         plot_sample_profile(x[samp, :], ytrue[samp, :], ypred[samp, :],
                             lev, filename=sample_filename)
         # Need to reset sample number for next iteration
         samp = None
 
 
-def plot_sample_profile(x, y_true, y_pred, lev, filename=None):
+def plot_sample_profile(x, y_true, y_pred, lev, filename=None, pflag=False):
         """Plots the vertical profiles of input T & q and predicted and true
         output tendencies"""
-        f = plt.figure()
-        gs = gridspec.GridSpec(1, 2)
-        ax1 = plt.subplot(gs[0, 0])
-        ax3 = plt.subplot(gs[0, 1])
+        f, (ax1, ax3) = plt.subplots(1, 2, figsize=(7.5,5))
         T = nnload.unpack(x, 'T', axis=0)
         q = nnload.unpack(x, 'q', axis=0)
         theta = nnatmos.calc_theta(T, lev)
         theta_e = nnatmos.calc_theta_e(T, theta, q)
         theta_e_ns = theta_e[-2]*np.ones(lev.shape)
         # Plot input temperature profile
+        if pflag:
+            lev = lev*1000
         ax1.plot(theta, lev, label=r'$\theta$')
         ax1.plot(theta_e, lev, label=r'$\theta_e$')
         ax1.plot(theta_e_ns, lev)
-        ax1.set_ylim(1, 0.25)
+        ax1.set_ylim(1000, 250)
         ax1.set_xlim(270, 370)
         ax1.set_title(r'Input Profiles')
         ax1.set_xlabel(r'$\theta$ [K]')
@@ -425,14 +424,16 @@ def plot_sample_profile(x, y_true, y_pred, lev, filename=None):
                  ls='-', label=r'$\Delta$q true')
         ax3.plot(L * nnload.unpack(y_pred, 'q', axis=0), lev, color='blue',
                  ls='--', label=r'$\Delta$q pred')
-        ax3.set_ylim(1, 0.25)
-        ax3.set_xlabel('Cp*T or L*q [kJ/day]')
-        ax3.set_title('Output Temp and Humidity')
+        ax3.set_ylim(1000, 250)
+        ax3.set_xlabel('Cp*T or L*q [kJ/day/kg]')
+        ax1.set_ylabel('Pressure [hPa]')
+        ax3.set_title('Output Tendencies')
         ax3.legend(loc="upper left")
         ax3.grid(True)
+        f.tight_layout()
         # Save file if requested
         if filename is not None:
-            f.savefig(filename, bbox_inches='tight', dpi=450)
+            f.savefig(filename, bbox_inches='tight')
             plt.close()
 
 
