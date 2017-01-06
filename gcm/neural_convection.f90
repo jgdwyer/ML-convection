@@ -193,7 +193,8 @@ contains
 
 
    subroutine neural_convection_init(r_w1, r_w2, r_b1, r_b2, &
-                               xscale_mean,xscale_stnd, yscale_absmax)
+                               xscale_mean,xscale_stnd, yscale_absmax, &
+                             Tmin_check, Tmax_check, qmin_check, qmax_check)
 
 !-----------------------------------------------------------------------
 !
@@ -210,10 +211,15 @@ real, intent(out), dimension(32)        :: r_b2
 real, intent(out), dimension(32)        :: xscale_mean
 real, intent(out), dimension(32)        :: xscale_stnd
 real, intent(out), dimension(32)        :: yscale_absmax
+!real, intent(out), dimension(30)        :: Tmin_check
+!real, intent(out), dimension(30)        :: Tmax_check
+!real, intent(out), dimension(30)        :: qmin_check
+!real, intent(out), dimension(30)        :: qmax_check
 
 ! This will be the netCDF ID for the file and data variable.
 integer :: ncid
 integer :: r_w1_varid, r_b1_varid, r_w2_varid, r_b2_varid
+!integer :: Tmin_check_varid, Tmax_check_varid, qmin_check_varid, qmax_check_varid
 integer :: xscale_mean_varid
 integer :: xscale_stnd_varid, yscale_absmax_varid
 !----------- read namelist ---------------------------------------------
@@ -247,6 +253,10 @@ integer :: xscale_stnd_varid, yscale_absmax_varid
       xscale_mean = 0.
       xscale_stnd = 0.
       yscale_absmax = 0.
+ !     Tmin_check = 0.
+ !     Tmax_check = 0.
+ !     qmin_check = 0.
+ !     qmax_check = 0.
 
 ! Open the file. NF90_NOWRITE tells netCDF we want read-only access
 ! Get the varid of the data variable, based on its name.
@@ -273,6 +283,18 @@ integer :: xscale_stnd_varid, yscale_absmax_varid
       
       call check( nf90_inq_varid(ncid,"yscale_absmax",     yscale_absmax_varid))
       call check( nf90_get_var(  ncid, yscale_absmax_varid,yscale_absmax      ))
+    
+!      call check( nf90_inq_varid(ncid,"Tmin_check",     Tmin_check_varid))
+!      call check( nf90_get_var(  ncid, Tmin_check_varid, Tmin_check      ))
+    
+!      call check( nf90_inq_varid(ncid,"Tmax_check",     Tmax_check_varid))
+!      call check( nf90_get_var(  ncid, Tmax_check_varid, Tmax_check      ))
+    
+!      call check( nf90_inq_varid(ncid,"qmin_check",     qmin_check_varid))
+!      call check( nf90_get_var(  ncid, qmin_check_varid, qmin_check      ))
+    
+!      call check( nf90_inq_varid(ncid,"qmax_check",     qmax_check_varid))
+!      call check( nf90_get_var(  ncid, qmax_check_varid, qmax_check      ))
     
       ! Close the file
       call check( nf90_close(ncid))
