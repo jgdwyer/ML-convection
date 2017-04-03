@@ -10,11 +10,11 @@ y_ppi = {'name': 'SimpleY', 'method': 'qTindividually'}
 
 
 # Run an example with many neurons in first layer, but not many in second layer
-nntrain.train_nn_wrapper(1, 50, x_ppi, y_ppi, minlev=0.2,
+nntrain.TrainNNwrapper(1, 51, x_ppi, y_ppi, minlev=0.2,
                  n_iter=3000, rainonly=False, weight_decay=1e-6,
                  N_trn_exs=50, weight_precip=False,
                  weight_shallow=False, convcond=False,
-                 cirrusflag=False)
+                 cirrusflag=True)
 
 num_layers = [1, 2]
 num_neurons = [100, 50, 10]  # [10, 50, 100]

@@ -17,7 +17,7 @@ matplotlib.rcParams['agg.path.chunksize'] = 10000
 # ---   META PLOTTING SCRIPTS  --- #
 
 
-def plot_all_figs(r_str, training_file, validation=True, noshallow=False,
+def PlotAllFigs(r_str, training_file, validation=True, noshallow=False,
                   rainonly=False):
     # Open the neural network and the preprocessing scheme
     r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \

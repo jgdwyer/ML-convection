@@ -39,7 +39,7 @@ def TrainNNwrapper(num_layers, hidneur, x_ppi, y_ppi,
     """
     # Load training data
     datadir, trainfile, testfile, pp_str = nnload.GetDataPath(cirrusflag, convcond)
-    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(trainfile, minlev, rainonly=rainonly,
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.LoadData(trainfile, minlev, rainonly=rainonly,
                                                                noshallow=noshallow, N_trn_exs=N_trn_exs)
     w = TrainingWeights(y, Pout, lev, weight_precip, weight_shallow)
     x_pp, x, y_pp, y, pp_str = PreprocessData(x_ppi, x, y_ppi, y, pp_str, N_trn_exs)
@@ -71,7 +71,7 @@ def TrainNNwrapper(num_layers, hidneur, x_ppi, y_ppi,
     r_mlp, r_errors = TrainNN(r_mlp, r_str, x, y, w)
     SaveNN(r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev)
     # Plot figures with validation data (and with training data)
-    nnplot.plot_all_figs(r_str, testfile, noshallow=noshallow,
+    nnplot.PlotAllFigs(r_str, testfile, noshallow=noshallow,
                          rainonly=rainonly)
     if plot_training_results:
         nnplot.plot_all_figs(r_str, trainfile, validation=False,

@@ -6,7 +6,7 @@ import warnings
 from netCDF4 import Dataset
 
 
-def LoadData(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
+def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
              rainonly=False, noshallow=False, cosflag=True, randseed=False,
              verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
