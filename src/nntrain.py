@@ -108,6 +108,8 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     # Train neural network
     r_mlp, r_errors = train_nn(r_mlp, r_str, x, y, w)
     # Save neural network
+    if not os.path.exists('./data/regressors/'):
+        os.makedirs(figpath)
     pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev,
                  dlev], open('./data/regressors/' + r_str + '.pkl', 'wb'))
     # Plot figures with validation data (and with training data)
