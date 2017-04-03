@@ -3,7 +3,6 @@ channels:
 - defaults
 - conda-forge
 dependencies:
-- appnope=0.1.0=py35_0
 - bleach=1.5.0=py35_0
 - curl=7.49.0=1
 - cycler=0.10.0=py35_0
@@ -80,5 +79,5 @@ dependencies:
   - prompt-toolkit==1.0.13
   - scikit-neuralnetwork==0.7
   - theano==0.8.2
-prefix: /Users/jgdwyer/anaconda/envs/mlconvection2
+prefix: /Users/jgdwyer/anaconda/envs/mlconvection
 
