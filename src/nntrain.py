@@ -124,6 +124,7 @@ def UpdateMLPname(weight_precip, weight_shallow, r_str):
     if weight_shallow:
         r_str = r_str + '_wsh'
     r_str = r_str + '_v3'  # reflects that we are loading v3 of training data
+    return r_str
 
 def SaveNN(r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev):
     """Save neural network"""
