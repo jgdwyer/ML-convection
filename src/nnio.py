@@ -154,7 +154,7 @@ def write_netcdf_v4():
         'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
     datasource = './data/conv_training_v3.pkl'
     # Set output filename
-    filename = '/Users/jgdwyer/neural_weights_v4.nc'
+    output_filename = './neural_weights_v4.nc'
     # Load ANN and preprocessors
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
@@ -177,7 +177,7 @@ def write_netcdf_v4():
     yscale_absmax[:Nlev] = y_pp[0]
     yscale_absmax[Nlev:] = y_pp[1]
     # Write weights to file
-    ncfile = Dataset(filename, 'w')
+    ncfile = Dataset(output_filename, 'w')
     # Write the dimensions
     ncfile.createDimension('N_in', w1.shape[0])
     ncfile.createDimension('N_h1', w1.shape[1])
@@ -299,12 +299,12 @@ def write_netcdf_convcond_v1():
     # Load ANN and preprocessors
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
-    # Need to transform some data for preprocessors to be able to export params
+    # Need to first transform some data for preprocessors to be able to export params
     x_unscl, y_unscl, _, _, _, _, _, _ = nnload.LoadData(datasource,
                                                          minlev=min(lev))
     x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
     y_scl = nnload.transform_data(y_ppi, y_pp, y_unscl)
-    # Also need to use the predict method to be able to export ANN params
+    # Also need to first use the predict method to be able to export ANN params
     _ = mlp.predict(x_scl)
     # Grab weights and input normalization
     w1 = mlp.get_parameters()[0].weights
