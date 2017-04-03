@@ -34,6 +34,7 @@ def plot_all_figs(r_str, training_file, validation=True, noshallow=False,
     if not os.path.exists(figpath):
         os.makedirs(figpath)
     # Do plotting
+    print('Beginning to make plots...')
     # Plot model errors over iteration history
     plot_model_error_over_time(errors, r_str, figpath)
     # Plot historgram showing how scaling changed character of input and output
@@ -56,8 +57,10 @@ def plot_all_figs(r_str, training_file, validation=True, noshallow=False,
     # Plot some example profiles
     plot_sample_profiles(20, x_unscl, ytrue_unscl, ypred_unscl, lev, figpath)
     # Plot mean, bias, rmse, r^2  (lat vs lev)
+    print('Beginning to make contour plots...')
     make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
                        training_file)
+    print('Done!')
 
 
 def make_contour_plots(figpath, x_ppi, y_ppi, x_pp, y_pp, r_mlp_eval, lat, lev,
