@@ -342,7 +342,7 @@ def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev, datafile):
     rT = np.zeros((len(lat), len(lev)))
     rq = np.zeros((len(lat), len(lev)))
     for i in range(len(lat)):
-        print(i)
+        print('Loading data for latitude {:d} of {:d}'.format(i, len(lat)))
         T_true, q_true, T_pred, q_pred = \
             load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, i, datafile,
                          minlev=np.min(lev))
