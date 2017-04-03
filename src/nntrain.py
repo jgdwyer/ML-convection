@@ -37,44 +37,40 @@ def TrainNNwrapper(num_layers, hidneur, x_ppi, y_ppi,
     Returns:
         str: String id of trained NN
     """
-    # Load training data
+    # Loads data
     datadir, trainfile, testfile, pp_str = nnload.GetDataPath(cirrusflag, convcond)
     x, y, cv, Pout, lat, lev, dlev, timestep = nnload.LoadData(trainfile, minlev, rainonly=rainonly,
                                                                noshallow=noshallow, N_trn_exs=N_trn_exs)
+    # Prepare data
     w = TrainingWeights(y, Pout, lev, weight_precip, weight_shallow)
     x_pp, x, y_pp, y, pp_str = PreprocessData(x_ppi, x, y_ppi, y, pp_str, N_trn_exs)
-    if weight_decay > 0.0:
-        regularize = 'L2'
-    else:
-        regularize = None
+    regularize = CatchRegularization(weight_decay)
+    # Either build a random forest or build a neural netowrk
     if doRF:
-        r_mlp, r_str = build_randomforest(500, pp_str)
+        r_mlp, r_str = BuildRandomForest(500, pp_str)
         errors_stored = np.ones((1, 6))
     else:
-        # Build neural network
-        r_mlp, r_str = build_nn('regress', num_layers, 'Rectifier', hidneur,
+        r_mlp, r_str = BuildNN('regress', num_layers, 'Rectifier', hidneur,
                                 'momentum', pp_str, batch_size=100,
                                 n_stable=n_stable, n_iter=n_iter,
                                 learning_momentum=0.9, learning_rate=0.01,
                                 regularize=regularize,
                                 weight_decay=weight_decay,
                                 valid_size=0.2)
-    if weight_precip:
-        r_str = r_str + '_wpr'
-    if weight_shallow:
-        r_str = r_str + '_wsh'
-    r_str = r_str + '_v3'  # reflects that we are loading v3 of training data
+    r_str = UpdateMLPname(weight_precip, weight_shallow, r_str)
     # Print details about the ML algorithm we are using
     print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' +
           str(x.shape[1]) + ' input features and ' + str(y.shape[1]) +
           ' output targets')
+    # Train the neural network
     r_mlp, r_errors = TrainNN(r_mlp, r_str, x, y, w)
+    # Save the neural network to access it later
     SaveNN(r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev)
     # Plot figures with validation data (and with training data)
     nnplot.PlotAllFigs(r_str, testfile, noshallow=noshallow,
                          rainonly=rainonly)
     if plot_training_results:
-        nnplot.plot_all_figs(r_str, trainfile, validation=False,
+        nnplot.PlotAllFigs(r_str, trainfile, validation=False,
                              noshallow=noshallow, rainonly=rainonly)
     return r_str
 
@@ -114,6 +110,21 @@ def PreprocessData(x_ppi, x, y_ppi, y, pp_str, N_trn_exs):
     pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
     return x_pp, x, y_pp, y, pp_str
 
+def CatchRegularization(weight_decay):
+    """scikit-neuralnetwork seems to have a bug if regularization is set to zero"""
+    if weight_decay > 0.0:
+        regularize = 'L2'
+    else:
+        regularize = None
+    return regularize
+
+def UpdateMLPname(weight_precip, weight_shallow, r_str):
+    if weight_precip:
+        r_str = r_str + '_wpr'
+    if weight_shallow:
+        r_str = r_str + '_wsh'
+    r_str = r_str + '_v3'  # reflects that we are loading v3 of training data
+
 def SaveNN(r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev):
     """Save neural network"""
     if not os.path.exists('./data/regressors/'):
@@ -132,7 +143,7 @@ def store_stats(i, avg_train_error, best_train_error, avg_valid_error,
                           avg_train_obj_error, best_train_obj_error))
 
 
-def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
+def BuildNN(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
              batch_size=100, n_iter=None, n_stable=None,
              learning_rate=0.01, learning_momentum=0.9,
              regularize='L2', weight_decay=0.0, valid_size=0.5,
@@ -191,7 +202,7 @@ def build_nn(method, num_layers, actv_fnc, hid_neur, learning_rule, pp_str,
     return mlp, mlp_str
 
 
-def build_randomforest(N_trees, mlp_str):
+def BuildRandomForest(N_trees, mlp_str):
     mlp = RandomForestRegressor(n_estimators=N_trees)
     mlp_str = 'RF_regress_' + str(N_trees)
     return mlp, mlp_str
