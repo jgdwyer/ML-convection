@@ -5,7 +5,7 @@ from sklearn.ensemble import RandomForestRegressor
 import src.nnload as nnload
 import pickle
 import src.nnplot as nnplot
-
+import os
 
 # ---  BUILDING NEURAL NETS  --- #
 def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
@@ -13,7 +13,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
                      minlev=0.0, weight_precip=False, weight_shallow=False,
                      weight_decay=0.0, rainonly=False, noshallow=False,
                      N_trn_exs=None, convcond=False, doRF=False,
-                     cirrusflag=False):
+                     cirrusflag=False, plot_training_results=False):
     """Loads training data and trains and stores neural network
 
     Args:
@@ -33,53 +33,16 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         convcond (bool): If true, learn to do convection + condensation
         doRF (bool): Use a random forest rather than an ANN
         cirrusflag (bool): Run on the cirrus machine
+        plot_training_results (bool): Whether to also plot the model on training data
     Returns:
         str: String id of trained NN
     """
     # Load training data
-    if cirrusflag:
-        datadir = '/disk7/jgdwyer/chickpea/nndata/'
-    else:
-        datadir = './data/'
-    if convcond:
-        trainfile = datadir + 'convcond_training_v3.pkl'
-        testfile = datadir + 'convcond_testing_v3.pkl'
-        pp_str = 'convcond_'
-    else:
-        trainfile = datadir + 'conv_training_v3.pkl'
-        testfile = datadir + 'conv_testing_v3.pkl'
-        pp_str = ''
-    x, y, cv, Pout, lat, lev, dlev, timestep = \
-        nnload.loaddata(trainfile, minlev, rainonly=rainonly,
-                        noshallow=noshallow, N_trn_exs=N_trn_exs)
-    # Set up weights for training examples
-    wp = np.ones(y.shape[0])
-    ws = np.ones(y.shape[0])
-    if weight_precip:
-        wp = Pout + 1
-    if weight_shallow:
-        # 0.8 is near the level of maximum shallow convective activity
-        shallow_lev = np.argmin(np.abs(lev - 0.8))
-        q = nnload.unpack(y, 'q')
-        # Find where moistening is larger than some threshold
-        ind = np.argwhere(q[:, shallow_lev] >= 5)
-        # Set threshold events as proportional
-        ws[ind] = q[ind, shallow_lev]
-    # Combine weights
-    w = wp * ws
-    # Or set weights to none
-    if (not (weight_precip) and not (weight_shallow)):
-        w = None
-    # Transform data according to input preprocessor requirements
-    x_pp = nnload.init_pp(x_ppi, x)
-    x = nnload.transform_data(x_ppi, x_pp, x)
-    y_pp = nnload.init_pp(y_ppi, y)
-    y = nnload.transform_data(y_ppi, y_pp, y)
-    # Make preprocessor string for saving
-    pp_str = pp_str + 'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
-    pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
-    # Add number of training examples to string
-    pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
+    datadir, trainfile, testfile, pp_str = nnload.get_data_path(cirrusflag, convcond)
+    x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(trainfile, minlev, rainonly=rainonly,
+                                                               noshallow=noshallow, N_trn_exs=N_trn_exs)
+    w = training_weights(y, Pout, lev, weight_precip, weight_shallow)
+    x_pp, x, y_pp, y, pp_str = preprocess_data(x_ppi, x, y_ppi, y, pp_str, N_trn_exs)
     if weight_decay > 0.0:
         regularize = 'L2'
     else:
@@ -115,10 +78,46 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     # Plot figures with validation data (and with training data)
     nnplot.plot_all_figs(r_str, testfile, noshallow=noshallow,
                          rainonly=rainonly)
-    # nnplot.plot_all_figs(r_str, trainfile, validation=False,
-    #                      noshallow=noshallow, rainonly=rainonly)
+    if plot_training_results:
+        nnplot.plot_all_figs(r_str, trainfile, validation=False,
+                             noshallow=noshallow, rainonly=rainonly)
     return r_str
 
+
+def training_weights(y, Pout, lev, weight_precip, weight_shallow):
+    """Set up weights for training examples"""
+    wp = np.ones(y.shape[0])
+    ws = np.ones(y.shape[0])
+    if weight_precip:
+        wp = Pout + 1
+    if weight_shallow:
+        # 0.8 is near the level of maximum shallow convective activity
+        shallow_lev = np.argmin(np.abs(lev - 0.8))
+        q = nnload.unpack(y, 'q')
+        # Find where moistening is larger than some threshold
+        ind = np.argwhere(q[:, shallow_lev] >= 5)
+        # Set threshold events as proportional
+        ws[ind] = q[ind, shallow_lev]
+    # Combine weights
+    w = wp * ws
+    # Or set weights to none
+    if (not (weight_precip) and not (weight_shallow)):
+        w = None
+    return w
+
+def preprocess_data(x_ppi, x, y_ppi, y, pp_str, N_trn_exs):
+    """Transform data according to input preprocessor requirements and make
+    make preprocessor string for saving"""
+    x_pp = nnload.init_pp(x_ppi, x)
+    x = nnload.transform_data(x_ppi, x_pp, x)
+    y_pp = nnload.init_pp(y_ppi, y)
+    y = nnload.transform_data(y_ppi, y_pp, y)
+    # Make preprocessor string for saving
+    pp_str = pp_str + 'X-' + x_ppi['name'] + '-' + x_ppi['method'][:6] + '_'
+    pp_str = pp_str + 'Y-' + y_ppi['name'] + '-' + y_ppi['method'][:6] + '_'
+    # Add number of training examples to string
+    pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
+    return x_pp, x, y_pp, y, pp_str
 
 def store_stats(i, avg_train_error, best_train_error, avg_valid_error,
                 best_valid_error, avg_train_obj_error, best_train_obj_error,

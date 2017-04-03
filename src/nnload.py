@@ -366,6 +366,22 @@ def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev, datafile):
     return Tmean.T, qmean.T, Tbias.T, qbias.T, rmseT.T, rmseq.T, rT.T, rq.T
 
 
+def get_data_path(cirrusflag, convcond):
+    if cirrusflag:
+        datadir = '/disk7/jgdwyer/chickpea/nndata/'
+    else:
+        datadir = './data/'
+    if convcond:
+        trainfile = datadir + 'convcond_training_v3.pkl'
+        testfile = datadir + 'convcond_testing_v3.pkl'
+        pp_str = 'convcond_'
+    else:
+        trainfile = datadir + 'conv_training_v3.pkl'
+        testfile = datadir + 'conv_testing_v3.pkl'
+        pp_str = ''
+    return datadir, trainfile, testfile, pp_str
+
+
 def get_levs(minlev):
     # Define half sigma levels for data
     half_lev = np.array([0.000000000000000e+00, 9.202000000000000e-03,
