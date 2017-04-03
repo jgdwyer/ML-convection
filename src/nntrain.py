@@ -111,9 +111,9 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev,
                  dlev], open('./data/regressors/' + r_str + '.pkl', 'wb'))
     # Plot figures with validation data (and with training data)
-    nnplot.plot_all_figs(r_str, datasource=testfile, noshallow=noshallow,
+    nnplot.plot_all_figs(r_str, testfile, noshallow=noshallow,
                          rainonly=rainonly)
-    # nnplot.plot_all_figs(r_str, datasource=trainfile, validation=False,
+    # nnplot.plot_all_figs(r_str, trainfile, validation=False,
     #                      noshallow=noshallow, rainonly=rainonly)
     return r_str
 
