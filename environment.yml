@@ -1,4 +1,4 @@
-name: mlconvection2
+name: mlconvection
 channels:
 - defaults
 - conda-forge
