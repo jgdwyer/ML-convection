@@ -8,7 +8,7 @@ import src.nnplot as nnplot
 import os
 
 # ---  BUILDING NEURAL NETS  --- #
-def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
+def TrainNNwrapper(num_layers, hidneur, x_ppi, y_ppi,
                      n_iter=None, n_stable=None,
                      minlev=0.0, weight_precip=False, weight_shallow=False,
                      weight_decay=0.0, rainonly=False, noshallow=False,
@@ -38,11 +38,11 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
         str: String id of trained NN
     """
     # Load training data
-    datadir, trainfile, testfile, pp_str = nnload.get_data_path(cirrusflag, convcond)
+    datadir, trainfile, testfile, pp_str = nnload.GetDataPath(cirrusflag, convcond)
     x, y, cv, Pout, lat, lev, dlev, timestep = nnload.loaddata(trainfile, minlev, rainonly=rainonly,
                                                                noshallow=noshallow, N_trn_exs=N_trn_exs)
-    w = training_weights(y, Pout, lev, weight_precip, weight_shallow)
-    x_pp, x, y_pp, y, pp_str = preprocess_data(x_ppi, x, y_ppi, y, pp_str, N_trn_exs)
+    w = TrainingWeights(y, Pout, lev, weight_precip, weight_shallow)
+    x_pp, x, y_pp, y, pp_str = PreprocessData(x_ppi, x, y_ppi, y, pp_str, N_trn_exs)
     if weight_decay > 0.0:
         regularize = 'L2'
     else:
@@ -68,13 +68,8 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     print(r_str + ' Using ' + str(x.shape[0]) + ' training examples with ' +
           str(x.shape[1]) + ' input features and ' + str(y.shape[1]) +
           ' output targets')
-    # Train neural network
-    r_mlp, r_errors = train_nn(r_mlp, r_str, x, y, w)
-    # Save neural network
-    if not os.path.exists('./data/regressors/'):
-        os.makedirs(figpath)
-    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev,
-                 dlev], open('./data/regressors/' + r_str + '.pkl', 'wb'))
+    r_mlp, r_errors = TrainNN(r_mlp, r_str, x, y, w)
+    SaveNN(r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev)
     # Plot figures with validation data (and with training data)
     nnplot.plot_all_figs(r_str, testfile, noshallow=noshallow,
                          rainonly=rainonly)
@@ -84,7 +79,7 @@ def train_nn_wrapper(num_layers, hidneur, x_ppi, y_ppi,
     return r_str
 
 
-def training_weights(y, Pout, lev, weight_precip, weight_shallow):
+def TrainingWeights(y, Pout, lev, weight_precip, weight_shallow):
     """Set up weights for training examples"""
     wp = np.ones(y.shape[0])
     ws = np.ones(y.shape[0])
@@ -105,7 +100,7 @@ def training_weights(y, Pout, lev, weight_precip, weight_shallow):
         w = None
     return w
 
-def preprocess_data(x_ppi, x, y_ppi, y, pp_str, N_trn_exs):
+def PreprocessData(x_ppi, x, y_ppi, y, pp_str, N_trn_exs):
     """Transform data according to input preprocessor requirements and make
     make preprocessor string for saving"""
     x_pp = nnload.init_pp(x_ppi, x)
@@ -118,6 +113,13 @@ def preprocess_data(x_ppi, x, y_ppi, y, pp_str, N_trn_exs):
     # Add number of training examples to string
     pp_str = pp_str + 'Ntrnex' + str(N_trn_exs) + '_'
     return x_pp, x, y_pp, y, pp_str
+
+def SaveNN(r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev):
+    """Save neural network"""
+    if not os.path.exists('./data/regressors/'):
+        os.makedirs('./data/regressors/')
+    pickle.dump([r_mlp, r_str, r_errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev,
+                 dlev], open('./data/regressors/' + r_str + '.pkl', 'wb'))
 
 def store_stats(i, avg_train_error, best_train_error, avg_valid_error,
                 best_valid_error, avg_train_obj_error, best_train_obj_error,
@@ -195,7 +197,7 @@ def build_randomforest(N_trees, mlp_str):
     return mlp, mlp_str
 
 
-def train_nn(mlp, mlp_str, x, y, w=None):
+def TrainNN(mlp, mlp_str, x, y, w=None):
     """Train each item in a list of multi-layer perceptrons and then score
     on test data. Expects that mlp is a list of MLP objects"""
     # Initialize

@@ -159,7 +159,7 @@ def write_netcdf_v4():
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
     # Need to transform some data for preprocessors to be able to export params
-    x_unscl, y_unscl, _, _, _, _, _, _ = nnload.loaddata(datasource,
+    x_unscl, y_unscl, _, _, _, _, _, _ = nnload.LoadData(datasource,
                                                          minlev=min(lev))
     x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
     _ = nnload.transform_data(y_ppi, y_pp, y_unscl)
@@ -236,7 +236,7 @@ def write_netcdf_ensemble1():
             pickle.load(open('./data/regressors/' + mlp_str[i] + '.pkl', 'rb'))
         # Need to transform some data for preprocessors to be able to export
         # params
-        x_unscl, y_unscl, _, _, _, _, _, _ = nnload.loaddata(datasource,
+        x_unscl, y_unscl, _, _, _, _, _, _ = nnload.LoadData(datasource,
                                                              minlev=min(lev))
         x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
         y_scl = nnload.transform_data(y_ppi, y_pp, y_unscl)
@@ -300,7 +300,7 @@ def write_netcdf_convcond_v1():
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
     # Need to transform some data for preprocessors to be able to export params
-    x_unscl, y_unscl, _, _, _, _, _, _ = nnload.loaddata(datasource,
+    x_unscl, y_unscl, _, _, _, _, _, _ = nnload.LoadData(datasource,
                                                          minlev=min(lev))
     x_scl = nnload.transform_data(x_ppi, x_pp, x_unscl)
     y_scl = nnload.transform_data(y_ppi, y_pp, y_unscl)
@@ -359,7 +359,7 @@ def verify_netcdf_weights():
     nc_str = '/Users/jgdwyer/neural_weights_convcond_v1.nc'
     # Load unscaled data
     x, y, cv, Pout, lat, lev, dlev, timestep = \
-        nnload.loaddata('./data/convcond_testing_v3.pkl',
+        nnload.LoadData('./data/convcond_testing_v3.pkl',
                         0.2, all_lats=True, indlat=None, rainonly=False)
     # Load preprocessers
     r_mlp_eval, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat2, lev2, dlev = \
@@ -411,10 +411,10 @@ def compare_convcond_prediction(cv_str, cvcd_str, minlev):
                          'scaled space may give different results')
     # Load data
     x_unscl, ytcv_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata('./data/conv_testing_v3.pkl', minlev=minlev,
+        nnload.LoadData('./data/conv_testing_v3.pkl', minlev=minlev,
                         N_trn_exs=10000, randseed=True)
     xcvcd_unscl, ytcvcd_unscl, _, _, _, _, _, _ = \
-        nnload.loaddata('./data/convcond_testing_v3.pkl', minlev=minlev,
+        nnload.LoadData('./data/convcond_testing_v3.pkl', minlev=minlev,
                         N_trn_exs=10000, randseed=True)
     # Check that x values are the same to make sure random seeds are same
     if np.sum(np.abs(x_unscl - xcvcd_unscl)) > 0.0:

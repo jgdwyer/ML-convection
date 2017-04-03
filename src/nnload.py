@@ -6,7 +6,7 @@ import warnings
 from netCDF4 import Dataset
 
 
-def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
+def LoadData(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
              rainonly=False, noshallow=False, cosflag=True, randseed=False,
              verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
@@ -366,7 +366,7 @@ def stats_by_latlev(x_ppi, y_ppi, x_pp, y_pp, r_mlp, lat, lev, datafile):
     return Tmean.T, qmean.T, Tbias.T, qbias.T, rmseT.T, rmseq.T, rT.T, rq.T
 
 
-def get_data_path(cirrusflag, convcond):
+def GetDataPath(cirrusflag, convcond):
     if cirrusflag:
         datadir = '/disk7/jgdwyer/chickpea/nndata/'
     else:
