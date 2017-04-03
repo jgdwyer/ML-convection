@@ -465,8 +465,8 @@ def plot_model_error_over_time(errors, mlp_str, fig_dir):
 
 def plot_neural_fortran(training_file, mlp_str, latind=None, timeind=None,
                         ensemble=False):
-    mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
-        'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
+    # mlp_str = 'X-StandardScaler-qTindi_Y-SimpleY-qTindi_' + \
+    #     'Ntrnex100000_r_100R_mom0.9reg1e-06_Niter10000_v3'
     mlp, _, errors, x_ppi, y_ppi, x_pp, y_pp, lat, lev, dlev = \
         pickle.load(open('./data/regressors/' + mlp_str + '.pkl', 'rb'))
     x_unscl, ytrue_unscl, y_dbm_unscl, Ptrue, P_dbm, ten, qen = \
