@@ -6,7 +6,7 @@ import warnings
 from netCDF4 import Dataset
 
 
-def loaddata(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
+def LoadData(filename, minlev, all_lats=True, indlat=None, N_trn_exs=None,
              rainonly=False, noshallow=False, cosflag=True, randseed=False,
              verbose=True):
     """v2 of the script to load data. See prep_convection_output.py for how
@@ -317,7 +317,7 @@ def load_one_lat(x_ppi, y_ppi, x_pp, y_pp, r_mlp, indlat, datafile, minlev=0.,
        at a given latitude"""
     # Load data
     x, y, cv, Pout, lat, lev, dlev, timestep = \
-        loaddata(datafile, minlev, rainonly=rainonly, all_lats=False,
+        LoadData(datafile, minlev, rainonly=rainonly, all_lats=False,
                  indlat=indlat, verbose=False, N_trn_exs=2500)
     # Calculate predicted output
     x = transform_data(x_ppi, x_pp, x)
@@ -420,7 +420,7 @@ def get_x_y_pred_true(r_str, training_file, minlev, noshallow=False,
         pickle.load(open('./data/regressors/' + r_str + '.pkl', 'rb'))
     # Load raw data from file
     x_unscl, ytrue_unscl, _, _, _, _, _, _ = \
-        loaddata(training_file, minlev=minlev, N_trn_exs=None)
+        LoadData(training_file, minlev=minlev, N_trn_exs=None)
     # Scale true values
     ytrue_scl = transform_data(y_ppi, y_pp, ytrue_unscl)
     # Apply x preprocessing to scale x-data and predict output
